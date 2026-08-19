@@ -1,0 +1,10 @@
+{
+  "name": "@ccx/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron main-process surface for the Work/Code product: window, preload, IPC namespace.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  }
+}

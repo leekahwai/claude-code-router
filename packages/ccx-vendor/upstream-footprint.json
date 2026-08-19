@@ -1,0 +1,21 @@
+{
+  "$comment": "The isolation claim, made enforceable. Every upstream file this fork modifies must be listed here with a reason and a line budget. Adding an entry is a deliberate, reviewable act — which is the point.",
+  "baselineRef": "vendor-baseline",
+  "ownedPrefixes": [
+    "packages/ccx-",
+    "design/",
+    ".github/workflows/ccx-"
+  ],
+  "generatedAllowed": [
+    "package-lock.json"
+  ],
+  "totalLineBudget": 1,
+  "allowed": [
+    {
+      "path": "packages/electron/src/main/main-app.ts",
+      "maxAddedLines": 1,
+      "maxRemovedLines": 0,
+      "reason": "The seam. One side-effect import that boots the Work/Code product. See design/fork-isolation-strategy.md §4."
+    }
+  ]
+}

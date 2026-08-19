@@ -1,0 +1,17 @@
+{
+  "name": "@ccx/vendor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Verbatim copies of upstream CCR logic, with provenance and drift detection.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "node tools/vendor-check.mjs",
+    "baseline": "node tools/vendor-baseline.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --import ./tools/ccr-alias-hook.mjs \"test/**/*.test.ts\"",
+    "sync": "node tools/vendor-sync.mjs",
+    "footprint": "node tools/footprint-check.mjs"
+  }
+}

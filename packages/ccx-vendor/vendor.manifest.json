@@ -1,0 +1,100 @@
+{
+  "$comment": "Provenance for every file copied out of upstream CCR. See design/fork-isolation-strategy.md.",
+  "baselineRef": "vendor-baseline",
+  "upstreamRef": "upstream/main",
+  "artifacts": [
+    {
+      "output": "src/core/mcp/mcp-client.ts",
+      "owner": "platform-team",
+      "why": "The harness needs an MCP client. Extracting these transports would edit a 2936-line upstream file with a live consumer; copying leaves it byte-identical.",
+      "modifications": "Self-contained prelude replaces ToolHub module scope; classes exported; client identity parameterised.",
+      "regions": [
+        {
+          "id": "sse-transport",
+          "path": "packages/core/src/mcp/toolhub-mcp.ts",
+          "startPattern": "^class SseMcpClient implements McpClient \\{$",
+          "endPattern": "^\\}$",
+          "sha256": "34a153a02c4b598f3141e5261f0ab222029e3e34471a389e7e0eefe63181d9ce",
+          "baselineLines": "927-1120"
+        },
+        {
+          "id": "http-transport",
+          "path": "packages/core/src/mcp/toolhub-mcp.ts",
+          "startPattern": "^class HttpMcpClient implements McpClient \\{$",
+          "endPattern": "^\\}$",
+          "sha256": "4d0c9330348446f4643de9a8a08e2ff9ef116c952b8cd3fa0d4216b84baa5850",
+          "baselineLines": "1122-1218"
+        },
+        {
+          "id": "stdio-transport",
+          "path": "packages/core/src/mcp/toolhub-mcp.ts",
+          "startPattern": "^class StdioMcpClient implements McpClient \\{$",
+          "endPattern": "^\\}$",
+          "sha256": "5ea1a76d313937c105354e3462857550850efb3310e3006db858ef9728dd74ad",
+          "baselineLines": "1220-1406"
+        },
+        {
+          "id": "normalize-tool-list",
+          "path": "packages/core/src/mcp/toolhub-mcp.ts",
+          "startPattern": "^function normalizeToolList\\(value: unknown\\): ToolDefinition\\[\\] \\{$",
+          "endPattern": "^\\}$",
+          "sha256": "ac9f6c145c7edf5dc07445439d29269931f3f135d3c4245b2368cd6aa5f6706a",
+          "baselineLines": "1904-1921"
+        },
+        {
+          "id": "parse-http-jsonrpc-response",
+          "path": "packages/core/src/mcp/toolhub-mcp.ts",
+          "startPattern": "^function parseHttpJsonRpcResponse\\(text: string\\): unknown \\{$",
+          "endPattern": "^\\}$",
+          "sha256": "bdd2fae8c85e6f5c95963c733e87ade5702d16b37157930596610af07303f343",
+          "baselineLines": "1931-1949"
+        },
+        {
+          "id": "consume-sse-events",
+          "path": "packages/core/src/mcp/toolhub-mcp.ts",
+          "startPattern": "^function consumeSseEvents\\(buffer: string, handle: \\(event: \\{ data: string; event: string \\}\\) => void\\): string \\{$",
+          "endPattern": "^\\}$",
+          "sha256": "302a35905be869628f4e9bf8034e464538c4b3e9659cd53f120ee3569f220adf",
+          "baselineLines": "1951-1974"
+        }
+      ],
+      "substitutions": [
+        {
+          "from": "toolHubServerName",
+          "to": "ccxMcpClientName"
+        },
+        {
+          "from": "class SseMcpClient implements McpClient {",
+          "to": "export class SseMcpClient implements McpClient {"
+        },
+        {
+          "from": "class HttpMcpClient implements McpClient {",
+          "to": "export class HttpMcpClient implements McpClient {"
+        },
+        {
+          "from": "class StdioMcpClient implements McpClient {",
+          "to": "export class StdioMcpClient implements McpClient {"
+        }
+      ],
+      "generated": true
+    },
+    {
+      "output": "src/core/agents/skill-roots.ts",
+      "owner": "platform-team",
+      "why": "Per-harness skill directory roots. The upstream copy lives in a 7210-line file; refactoring it would be the most conflict-prone change available.",
+      "modifications": "Root resolution lifted out of the text renderer and typed; listing returns structured entries instead of a chat string.",
+      "regions": [
+        {
+          "id": "render-agent-skills",
+          "path": "packages/core/src/agents/codex/cli-middleware-runtime.ts",
+          "startPattern": "^function renderAgentSkills\\(directory, agent\\) \\{$",
+          "endPattern": "^\\}$",
+          "sha256": "d7f02ad018fa3d36492679ae0f741807e24252ffd370871e3bdd885a8ebf2efa",
+          "baselineLines": "2398-2413"
+        }
+      ],
+      "generated": false
+    }
+  ],
+  "baselineCommit": "fcf3d85"
+}

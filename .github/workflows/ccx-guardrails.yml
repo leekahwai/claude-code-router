@@ -1,0 +1,52 @@
+# Guardrails for the Work/Code product built on top of upstream CCR.
+#
+# This workflow is additive: it does not modify any upstream workflow, so it
+# cannot conflict when merging upstream. See design/fork-isolation-strategy.md.
+name: CCX guardrails
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Build native SQLite binding
+        run: npm rebuild better-sqlite3
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/musistudio/claude-code-router.git || true
+          git fetch --no-tags upstream main
+
+      # A drifted vendored region is a decision to make, not a silent surprise.
+      - name: Vendor drift check
+        run: npm run -w @ccx/vendor check -- upstream/main
+
+      # Our assumptions about the upstream surfaces we import.
+      - name: Contract tests
+        run: npm run -w @ccx/harness test
+
+      - name: Vendor tests
+        run: npm run -w @ccx/vendor test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The isolation claim itself, enforced: one line of upstream source.
+      - name: Upstream footprint budget
+        run: node packages/ccx-vendor/tools/footprint-check.mjs

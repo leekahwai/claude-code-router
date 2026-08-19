@@ -1,0 +1,13 @@
+{
+  "name": "@ccx/harness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Work/Code harness runtime: session store, turn metrics, context assembly.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --import ../ccx-vendor/tools/ccr-alias-hook.mjs \"test/**/*.test.ts\""
+  }
+}

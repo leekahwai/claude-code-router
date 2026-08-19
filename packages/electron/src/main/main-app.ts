@@ -6,6 +6,7 @@ import { restoreClaudeAppGatewayConfig, syncClaudeAppGatewayConfig } from "@ccr/
 import { deepLinkService } from "./deep-link";
 import { gatewayService } from "@ccr/core/gateway/service";
 import "./ipc";
+import "@ccx/desktop/boot";
 import { applyProfileConfig, restoreGlobalProfileConfigsOnExit } from "@ccr/core/profiles/service";
 import { ensureCcrCliLauncher, persistPreparedCcrCliPath, prepareCcrCliLauncherRuntime, type CcrCliLauncherPreparation } from "@ccr/core/profiles/launch-service";
 import { syncLaunchAtLogin } from "./launch-at-login";

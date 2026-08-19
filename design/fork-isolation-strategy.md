@@ -129,7 +129,12 @@ Every capability the product needs, the naive implementation, and the isolated o
 | 16 | Our own configuration | add to `AppConfig` in `contracts/app.ts` | our own config store | **0** |
 | 17 | Packaging | `electron-builder.json` | our output already lands in `packages/electron/dist` | **0** |
 
-**Residual upstream surface: one line, plus one npm script.**
+**Residual upstream surface: one line.** (H0 landed this at exactly one — the
+npm script proved unnecessary, because our packages define their own `scripts`
+and the root's existing `npm run test:packages` already runs
+`npm run test --workspaces --if-present`. The only other changed non-`ccx` file
+is `package-lock.json`, which is generated; regenerate it on merge rather than
+resolving it.)
 
 The one line goes in `packages/electron/src/main/main-app.ts`, immediately beside the existing
 `import "./ipc";` at line 8:
@@ -219,6 +224,29 @@ more of it. Copying too much costs disk; editing upstream costs every future mer
 
 ---
 
+## 5.1 Enforcing the claim
+
+Discipline decays within a sprint. `packages/ccx-vendor/tools/footprint-check.mjs`
+turns the isolation claim into a build failure: it diffs the working tree against
+`vendor-baseline`, ignores everything under `packages/ccx-*`, `design/` and
+`.github/workflows/ccx-*`, and fails on any upstream file that is not listed in
+`upstream-footprint.json` with a reason and a line budget.
+
+```
+Upstream footprint vs vendor-baseline
+
+  ok   packages/electron/src/main/main-app.ts  +1/-0  (The seam.)
+
+1 upstream line(s) changed; budget is 1.
+Footprint within budget.
+```
+
+Adding a budget entry is allowed and is meant to be a deliberate, reviewable act
+— which is the difference between a fork that stays upgradable and one that does
+not.
+
+---
+
 ## 6. Upgrade runbook
 
 ```
@@ -281,7 +309,7 @@ H0 was "session store schema plus extract the MCP client". Under this strategy i
 | 0.1 | `upstream` remote, `vendor-baseline` tag, documented merge policy |
 | 0.2 | Four workspace packages, non-`@ccr` scope, `exports` → source, zero build edits |
 | 0.3 | The one-line seam in `main-app.ts`; our window, preload and IPC namespace booting empty |
-| 0.4 | Vendor tooling: header convention, `vendor:check`, wired into CI |
+| 0.4 | Vendor tooling: header convention, `check` / `sync` / `baseline`, footprint budget, wired into CI |
 | 0.5 | First vendored files — MCP transports and skill roots — with provenance |
 | 0.6 | Contract test suite (§7) green against the current baseline |
 | 0.7 | `acme_turn_metrics` schema and the `request_id` join, proven end to end |
