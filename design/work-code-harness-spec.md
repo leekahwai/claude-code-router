@@ -194,9 +194,10 @@ Sort by relevance or let the user enable a subset per session.
 
 ### 3.4 MCP registry
 
-Extract the three transports from `toolhub-mcp.ts` into `packages/core/src/mcp/client.ts` as a
-shared module. `toolhub-mcp.ts` and the new harness then share one implementation — this is a
-refactor with an existing consumer, so it is verifiable against current behaviour.
+**Vendor** the three transports out of `toolhub-mcp.ts` into `packages/acme-vendor/` with a
+provenance header — do not extract them into a shared upstream module. Editing a 2,936-line file
+with a live consumer guarantees a merge conflict on every upstream ToolHub change; a copy leaves it
+byte-identical. See `fork-isolation-strategy.md` §1.
 
 Then add:
 
@@ -388,7 +389,7 @@ land before H0 because the session schema needs a real `user_id` from the first 
 | Phase | Track | Deliverable | Est. |
 |---|---|---|---|
 | **A1** Identity + roles | admin | Users, roles, authenticated identity (SSO or centrally issued keys), server-side authorization, access log | 2 wk |
-| **H0** Foundations | harness | Session store schema with `user_id`; extract the MCP client from `toolhub-mcp.ts` into a shared module, existing ToolHub consumer still green | 1–1.5 wk |
+| **H0** Foundations | harness | Fork-isolation scaffolding (see `fork-isolation-strategy.md`): upstream remote, own workspace packages, vendor tooling, contract tests, one-line seam. Session store schema with `user_id`. MCP transports **vendored, not extracted** | 2–2.5 wk |
 | **H1** Turn loop | harness | Streaming client through the gateway, SSE parse, tool_use detection, multi-turn loop, cancellation. Test-driven, no UI | 2 wk |
 | **H2** MCP + tools | harness | Registry, pooling, namespacing, timeouts, builtin file/shell tools, permission model | 2 wk |
 | **H3** Skills | harness | Registry, frontmatter parsing, menu injection, on-demand load, per-harness roots | 1–1.5 wk |
@@ -433,7 +434,7 @@ gateway-side policy and metering work (~4 weeks) lands first or alongside.
 | Transcript storage growth underestimated | Medium | Sync the session store, not request logs — linear, not quadratic |
 | Secrets pasted into chat get stored forever | Medium | Redaction before write, in H7 |
 | Context assembly breaks prompt caching every turn | Medium | Byte-stable layers 1–4; verify with the inflation metric |
-| Extracting the MCP client regresses ToolHub | Medium | Refactor with the existing consumer's tests as the gate |
+| Upstream upgrades blocked by accumulated edits to CCR files | **High** | Fork-isolation strategy; residual upstream surface is one line |
 | Stdio MCP child processes leak across sessions | Medium | Pooled lifecycle with explicit close in H2 |
 | Renderer holds the gateway API key | Medium | Stream over IPC; keys never leave main |
 | Approval fatigue drives auto-approve-everything | Low | Sensible read defaults, per-session memory |
