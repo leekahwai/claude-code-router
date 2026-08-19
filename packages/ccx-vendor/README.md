@@ -71,3 +71,49 @@ cheap to make.
   is bundled to CommonJS for the Electron main process.
 
 All three adaptations live here rather than in upstream files.
+
+## The native-module ABI trap
+
+`better-sqlite3` is compiled for exactly one ABI, and which one you have changes
+**which tests run at all**.
+
+Upstream's `build/run-tests.mjs` picks the core suite's runtime by probing
+better-sqlite3 under plain Node:
+
+```js
+return probe.status === 0 ? "node" : "electron";
+```
+
+So:
+
+| You ran | Probe | Core suite runs under | Result |
+|---|---|---|---|
+| `npm run rebuild:sqlite3` (Electron ABI — the repo's own script) | fails | **Electron** | 790 tests, 0 failures |
+| `npm rebuild better-sqlite3` (Node ABI) | succeeds | Node | 3 desktop-runtime tests fail |
+
+Those three failures are not defects. They are tests that need the Electron
+runtime, silently routed to Node. If you see them, check your ABI before
+investigating anything else.
+
+Our own packages sidestep the trap: `tools/run-ccx-tests.mjs` runs the same
+probe and picks the runtime accordingly, so `npm run -w @ccx/harness test`
+passes under either setup.
+
+## Upstream suite ratchet
+
+`upstream-known-failures.json` records upstream tests we knowingly tolerate,
+with a reason. It is currently **empty** — upstream is green when run correctly.
+
+`tools/upstream-suite-check.mjs` compares a suite's TAP output against that list
+and fails when:
+
+- a failure appears that is **not** listed (we probably caused it), or
+- a listed failure **starts passing** (the entry is stale and should be deleted).
+
+```bash
+npm run test:core -- --test-reporter=tap > core.tap || true
+node packages/ccx-vendor/tools/upstream-suite-check.mjs core core.tap
+```
+
+This is what stops "that test was already failing" from being something you have
+to take on trust.

@@ -1,7 +1,7 @@
 # Guardrails for the Work/Code product built on top of upstream CCR.
 #
-# This workflow is additive: it does not modify any upstream workflow, so it
-# cannot conflict when merging upstream. See design/fork-isolation-strategy.md.
+# Additive only: this file does not modify any upstream workflow, so it cannot
+# conflict when merging upstream. See design/fork-isolation-strategy.md.
 name: CCX guardrails
 
 on:
@@ -11,6 +11,7 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Fast job: everything that only needs our own packages.
   guardrails:
     runs-on: ubuntu-latest
     steps:
@@ -25,7 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Build native SQLite binding
+      # Node ABI is enough here; our test runner falls back to Electron when a
+      # developer has run `npm run rebuild:sqlite3` instead.
+      - name: Build native SQLite binding (Node ABI)
         run: npm rebuild better-sqlite3
 
       - name: Fetch upstream
@@ -37,16 +40,56 @@ jobs:
       - name: Vendor drift check
         run: npm run -w @ccx/vendor check -- upstream/main
 
+      - name: Vendor tests
+        run: npm run -w @ccx/vendor test
+
       # Our assumptions about the upstream surfaces we import.
       - name: Contract tests
         run: npm run -w @ccx/harness test
-
-      - name: Vendor tests
-        run: npm run -w @ccx/vendor test
 
       - name: Typecheck
         run: npm run typecheck
 
       # The isolation claim itself, enforced: one line of upstream source.
       - name: Upstream footprint budget
-        run: node packages/ccx-vendor/tools/footprint-check.mjs
+        run: npm run -w @ccx/vendor footprint
+
+      - name: Build assets
+        run: npm run build:assets
+
+  # Slower job: upstream's own suites, run the way upstream intends, compared
+  # against the recorded known-failure set. This is what stops "that test was
+  # already failing" from being a matter of trust.
+  upstream-suites:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # The core suite selects its runtime by probing better-sqlite3: when the
+      # module is built for Electron the probe fails and the suite runs under
+      # Electron, which is what three desktop-runtime tests require. Building
+      # for Node instead silently routes the suite to plain Node and those three
+      # fail. Follow the repo's own script.
+      - name: Build native SQLite binding (Electron ABI)
+        run: npm run rebuild:sqlite3
+
+      - name: Core suite
+        run: |
+          set +e
+          xvfb-run -a npm run test:core -- --test-reporter=tap > core.tap 2>&1
+          set -e
+          node packages/ccx-vendor/tools/upstream-suite-check.mjs core core.tap
+
+      - name: CLI suite
+        run: |
+          set +e
+          npm run test:cli -- --test-reporter=tap > cli.tap 2>&1
+          set -e
+          node packages/ccx-vendor/tools/upstream-suite-check.mjs cli cli.tap

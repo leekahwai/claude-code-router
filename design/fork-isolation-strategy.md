@@ -247,6 +247,23 @@ not.
 
 ---
 
+## 5.2 Upstream suites: green, and kept that way
+
+Upstream's own suites pass in full — 790 core tests, 0 failures — provided the
+native module is built the way the repo intends (`npm run rebuild:sqlite3`,
+Electron ABI). Build it for Node instead and `build/run-tests.mjs` silently
+routes the core suite to plain Node, where three desktop-runtime tests fail.
+That is a setup trap, not a defect, and it is the first thing to check before
+investigating a "pre-existing failure".
+
+`upstream-known-failures.json` plus `tools/upstream-suite-check.mjs` keep this
+honest: the tolerated set is currently empty, CI fails if a new upstream failure
+appears, and it also fails if a tolerated one starts passing so the list cannot
+rot. Our own packages pick their runtime with the same probe upstream uses, so
+`npm run -w @ccx/harness test` passes under either ABI.
+
+---
+
 ## 6. Upgrade runbook
 
 ```

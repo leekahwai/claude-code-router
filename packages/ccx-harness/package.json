@@ -8,6 +8,6 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "test": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --import ../ccx-vendor/tools/ccr-alias-hook.mjs \"test/**/*.test.ts\""
+    "test": "node ../ccx-vendor/tools/run-ccx-tests.mjs \"test/**/*.test.ts\""
   }
 }

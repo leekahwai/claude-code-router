@@ -1,0 +1,10 @@
+{
+  "$comment": "Upstream tests we knowingly tolerate failing, with a reason and an expiry intent. An EMPTY list means zero tolerance, which is the goal. This file exists so 'that failure was already there' becomes a checked fact instead of a judgement call: CI fails if a NEW upstream failure appears, and also if a listed one starts passing (stale entry to delete).",
+  "suites": {
+    "core": [],
+    "cli": [],
+    "ui": [],
+    "electron": [],
+    "architecture": []
+  }
+}
