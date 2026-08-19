@@ -267,53 +267,173 @@ difference between the two modes, and it is more meaningful than the prompt diff
 
 ---
 
-## 4. Build order
+## 4. Admin retrieval of user history
 
-Each phase ends with something demonstrable. Phases 1–3 have no UI; that is deliberate — the loop
-should be provably correct before it is pretty.
+This requirement changes the shape of the system more than anything else in the spec. Everything
+above works on a laptop. **An administrator cannot read what never leaves the laptop.**
 
-| Phase | Deliverable | Est. |
+### 4.1 A third thing that already exists
+
+The transcript-shipping problem is already solved in this repo, twice.
+
+**`observability/raw-trace-sync.ts`** is a complete ingest pipeline: a durable on-disk spool
+(`RAW_TRACE_SPOOL_DIR`), bundling, `POST /__ccr/raw-trace-sync` authenticated by
+`x-ccr-raw-trace-token`, an inbox with size caps, retry with cooldown, dead-lettering with its own
+retention, and a bounded replay pass. **`usage/billing-sync.ts`** is the same shape with event-id
+dedupe over `POST /__ccr/billing-usage-sync`. Both are wired in `gateway/http/request-handler.ts:70,74`.
+
+That is exactly the contract needed to ship session transcripts from N laptops to a central
+collector: spool locally, push when reachable, dedupe on arrival, survive restarts. **Copy the
+pattern rather than inventing one.**
+
+**A session browser also already exists.** `getAgentAnalysis` groups request logs into sessions
+(`request-log-store.ts:2768`, `groupBy(requests, r => \`${r.agent}:${r.sessionId}\`)`), and the
+contracts already carry `AgentAnalysisSessionRow` (agent, client, models, providers, top tools,
+timings, token totals), `AgentAnalysisRequestRow` per request, and a trace payload fetch
+(`appGetAgentTracePayload`). The Agent Analysis view is roughly 80% of an admin session browser.
+What it lacks is a **user** dimension and **cross-machine** data.
+
+### 4.2 Two ways to get the data where an admin can read it
+
+| | Central CCR | Local harness + transcript sync |
 |---|---|---|
-| **H0** Foundations | Session store schema + migrations; extract MCP client from `toolhub-mcp.ts` into a shared module with the existing ToolHub consumer still green | 1–1.5 wk |
-| **H1** Turn loop | Streaming provider client through the gateway; SSE parse; tool_use detection; multi-turn loop; cancellation. Driven by a test script, no UI | 2 wk |
-| **H2** MCP + tools | Registry, pooling, namespacing, timeouts, builtin file/shell tools, permission model | 2 wk |
-| **H3** Skills | Registry, frontmatter parsing, menu injection, on-demand load, per-harness roots extracted from the CLI middleware | 1–1.5 wk |
-| **H4** Company context | Config schema, admin page, reference file store, `company_reference.read` tool, version stamping | 1–1.5 wk |
-| **H5** UI | Work + Code views, streaming renderer, tool-call cards, approval prompts, skill chips, session list | 3 wk |
-| **H6** Configuration page | Per-mode profile binding, provider/model pickers, MCP + skill enablement, gating | 1 wk |
-| **H7** Metering + hardening | Turn-to-usage correlation, per-mode and per-user dashboard widgets, retention policy, error paths | 1.5 wk |
+| Where sessions live | centrally, by construction | on laptops, pushed to a collector |
+| Admin retrieval | already there — it is one database | needs the sync track below |
+| Guardrail enforcement | solved — users never hold the config | still advisory; sync gives you drift *detection* |
+| Provider key custody | keys never leave the server | keys still on laptops unless keys are central too |
+| Offline use | no | yes |
+| Local-app value proposition | lost — the desktop UI becomes a thin client | kept |
 
-**~13–14 weeks** for one engineer, assuming the gateway-side policy and metering work
-(P1–P3 of the earlier plan, ~4 weeks) lands in parallel or first. H1 and H5 are the two that
-overrun; everything else is bounded.
+**If offline use is not a real requirement, central CCR is materially simpler** and collapses three
+open problems into one deployment decision. Choose local-plus-sync only if the desktop experience
+is the point.
 
-Parallelisable: H4 and H6 are independent of H1–H3. H5 can start against a mocked turn loop as
-soon as the IPC event contract from H1 is fixed.
+### 4.3 Sync the harness's session store, not the request logs
+
+On a central deployment it is tempting to treat `request_logs.request_body_text` as the transcript —
+it does contain the full conversation, because agents resend history every turn. Don't build on it:
+
+- **Storage grows quadratically.** Turn *k* carries *k* messages, so *n* turns store roughly
+  *n²/2* messages. The harness's own `messages` table stores each message once — linear.
+- It is request-shaped, not session-shaped; only the last request of a session holds the full
+  transcript.
+- It is lossy unless you force `requestLogSuccessSampleRate = 1` and `requestLogBodyCapture = "all"`,
+  which you would be doing purely to reconstruct data you already hold.
+
+Use request logs for forensics and cost; use the `messages` table for history. Join them on
+`turns.request_id`.
+
+### 4.4 Identity: typed usernames stop being adequate here
+
+The earlier plan proposed a username typed into the main UI, carried as `x-ccr-user`. That is fine
+for cost attribution. **It is not fine as the basis for an administrator reading someone's
+transcripts** — anyone can type anyone's name, so the data cannot support any decision made from it.
+
+Upgrade to authenticated identity:
+
+- **Best:** OIDC / SSO against the company IdP. The harness holds a token; the collector validates it;
+  the user id is a claim, not an input.
+- **Minimum viable:** centrally issued, per-user CCR API keys — provisioned by an admin, never
+  self-service. `ApiKeyConfig` already carries `id`, `name`, `createdAt`, `expiresAt` and limits, and
+  the gateway already resolves the calling key on every request (`pipeline.ts:355`), so the identity
+  reaches the metering layer with no new plumbing.
+
+### 4.5 You now need a real role model — and there is none
+
+Current auth is a **single shared token**: `x-ccr-web-auth`, constant-time compared, with hostname
+allow-listing and the token passed in the URL query string
+(`web/management-server.ts:136,647,720`). That is a single-user local admin model. There is no user
+table, no roles, no login, no server-side sessions anywhere in the codebase.
+
+Minimum to support this feature safely:
+
+```
+users        id · external_id · display_name · email · role(user|admin) · status · created_at
+sessions_idx session_id → user_id            // ownership, enforced server-side on every read
+access_log   id · actor_user_id · action · subject_user_id · session_id · at · reason
+```
+
+Three rules, all enforced on the server and never in the client:
+
+1. A user may read only their own sessions.
+2. An admin may read any session — and every such read writes an `access_log` row.
+3. The access log is append-only and visible to admins other than the reader.
+
+**That audit log is the feature.** Without it, "admin can read anyone's transcripts" is an
+unbounded capability; with it, it is a governed one.
+
+### 4.6 Governance is a design input here, not paperwork
+
+Transcripts are employee-authored content, and in some jurisdictions retaining and reviewing them
+carries notice, lawful-basis and retention obligations. This is not a blocker, and it is cheap to
+build in now and expensive to retrofit:
+
+- **Notice in the app** — state plainly, where sessions are listed, that history is retained and
+  visible to administrators.
+- **A defined retention period** with automatic deletion, configured centrally.
+- **Secret redaction before storage** — transcripts will contain tokens and keys that users paste.
+- **Access logging**, per §4.5.
+- **Export and deletion** for a named user, so a request can actually be serviced.
+
+Get whoever owns HR or legal policy to confirm the retention period and the notice wording before
+H5 ships a session list.
 
 ---
 
-## 5. Decisions still open
+## 5. Build order
+
+Two tracks. The **H track** is the harness; the **A track** is identity and administration. A1 must
+land before H0 because the session schema needs a real `user_id` from the first migration.
+
+| Phase | Track | Deliverable | Est. |
+|---|---|---|---|
+| **A1** Identity + roles | admin | Users, roles, authenticated identity (SSO or centrally issued keys), server-side authorization, access log | 2 wk |
+| **H0** Foundations | harness | Session store schema with `user_id`; extract the MCP client from `toolhub-mcp.ts` into a shared module, existing ToolHub consumer still green | 1–1.5 wk |
+| **H1** Turn loop | harness | Streaming client through the gateway, SSE parse, tool_use detection, multi-turn loop, cancellation. Test-driven, no UI | 2 wk |
+| **H2** MCP + tools | harness | Registry, pooling, namespacing, timeouts, builtin file/shell tools, permission model | 2 wk |
+| **H3** Skills | harness | Registry, frontmatter parsing, menu injection, on-demand load, per-harness roots | 1–1.5 wk |
+| **H4** Company context | harness | Config schema, admin page, reference store, read tool, version stamping | 1–1.5 wk |
+| **A2** Transcript sync | admin | Spool → push → ingest, modelled on `raw-trace-sync`; skip entirely on a central deployment | 1.5–2 wk |
+| **H5** Interface | harness | Work + Code views, streaming renderer, tool cards, approval prompts, skill chips, session list with retention notice | 3 wk |
+| **H6** Configuration page | harness | Per-mode profile binding, provider/model pickers, MCP and skill enablement, gating | 1 wk |
+| **A3** Admin console | admin | Cross-user session browser extending Agent Analysis, transcript reader, search, export, delete-for-user, access-log view | 2–2.5 wk |
+| **H7** Metering + hardening | harness | Turn-to-usage correlation, per-mode and per-user widgets, retention enforcement, redaction, error paths | 1.5–2 wk |
+
+**Harness track ≈ 13–14 weeks. Admin track ≈ 5.5–6.5 weeks**, of which A2 disappears on a central
+deployment. With A1 serialised in front and the rest overlapped, **≈ 17–19 weeks elapsed for one
+engineer**, or roughly 12–14 with two working the tracks in parallel. This still assumes the
+gateway-side policy and metering work (~4 weeks) lands first or alongside.
+
+---
+
+## 6. Decisions still open
 
 | Decision | Why it matters now | Recommendation |
 |---|---|---|
-| Which harness's skills does the app read? | Determines the root set and whether skills are portable between modes | Claude roots by default, selectable in config — the mapping already exists |
+| Central CCR or local + sync? | Decides whether A2 exists at all, and settles guardrail enforcement and key custody | Central, unless offline use is a real requirement |
+| Identity source | Typed names cannot support admin oversight | SSO; centrally issued per-user keys as the floor |
+| Retention period for transcripts | Schema and deletion job depend on it; needs a policy owner | Set before H0 ships the schema |
+| Whose skills does the app read? | Sets the root list and portability between modes | Claude roots by default, selectable |
 | Does Work get shell access? | The real security boundary between the modes | No. MCP and reads only |
-| Company pack: manifest or inline? | Context budget and cache economics | Manifest, with a read tool |
-| Is the pack authoritative or advisory? | Changes where config lives; hard to retrofit | Decide before H4 |
-| Session history retention | Transcripts will contain company context and possibly source code | Set a policy before H0 ships the schema |
-| One turn loop or two? | Divergence is expensive to unwind later | One loop, two configurations |
+| Context pack: manifest or inline? | Context budget and cache economics | Manifest, with a read tool |
+| Is the pack authoritative or advisory? | Changes where config lives; hard to retrofit | Falls out of the central/local decision |
+| One turn loop or two? | Divergence is expensive to unwind | One loop, two configurations |
 
 ---
 
-## 6. Risks specific to this build
+## 7. Risks
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| Skills assumed to work without file/shell tools | **High** | Scope the builtin tool surface in H2, before H3 |
-| Tool loop + streaming underestimated — resumption, interruption, partial tool calls | **High** | H1 is test-driven with no UI; treat it as the hardest phase |
-| Context assembly breaks prompt caching every turn | Medium | Byte-stable layers 1–4; verify with the prompt-inflation metric |
+| Admin retrieval bolted on after the schema ships without `user_id` | **High** | A1 lands before H0 |
+| Transcripts readable by admins with no audit trail | **High** | Access log is part of A1, not A3 |
+| Skills assumed to work without file and shell tools | **High** | Scope the builtin tool surface in H2, before H3 |
+| Tool loop plus streaming underestimated — resumption, interruption, partial calls | **High** | H1 is test-driven with no UI |
+| Retention and notice retrofitted after launch | **High** | Policy owner confirms before H5 |
+| Transcript storage growth underestimated | Medium | Sync the session store, not request logs — linear, not quadratic |
+| Secrets pasted into chat get stored forever | Medium | Redaction before write, in H7 |
+| Context assembly breaks prompt caching every turn | Medium | Byte-stable layers 1–4; verify with the inflation metric |
 | Extracting the MCP client regresses ToolHub | Medium | Refactor with the existing consumer's tests as the gate |
 | Stdio MCP child processes leak across sessions | Medium | Pooled lifecycle with explicit close in H2 |
-| Company context leaks into transcripts, exports or logs | Medium | It *will* be in request logs — set retention, and never render it in the UI |
 | Renderer holds the gateway API key | Medium | Stream over IPC; keys never leave main |
-| Approval fatigue makes users auto-approve everything | Low | Sensible read defaults; per-session memory |
+| Approval fatigue drives auto-approve-everything | Low | Sensible read defaults, per-session memory |
