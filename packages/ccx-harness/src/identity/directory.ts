@@ -23,6 +23,12 @@ export type UserRecord = {
   createdAt: string;
   displayName: string;
   email: string;
+  /**
+   * True for an account created by first-run bootstrap rather than by a person
+   * or an identity provider. Surfaced so it is obvious what has to be replaced
+   * when Active Directory is connected, instead of quietly becoming permanent.
+   */
+  temporary: boolean;
   /** Stable id from the identity provider once SSO lands; empty before then. */
   externalId: string;
   id: string;
@@ -57,6 +63,7 @@ export class IdentityDirectory {
         email TEXT NOT NULL DEFAULT '',
         role TEXT NOT NULL DEFAULT 'user',
         status TEXT NOT NULL DEFAULT 'active',
+        temporary INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL
       );
       CREATE UNIQUE INDEX IF NOT EXISTS ccx_users_external_idx
@@ -78,14 +85,15 @@ export class IdentityDirectory {
   upsertUser(user: Omit<UserRecord, "createdAt"> & { createdAt?: string }): UserRecord {
     this.database
       .prepare(`
-        INSERT INTO ccx_users (id, external_id, display_name, email, role, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO ccx_users (id, external_id, display_name, email, role, status, temporary, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           external_id = excluded.external_id,
           display_name = excluded.display_name,
           email = excluded.email,
           role = excluded.role,
-          status = excluded.status
+          status = excluded.status,
+          temporary = excluded.temporary
       `)
       .run(
         user.id,
@@ -94,6 +102,7 @@ export class IdentityDirectory {
         user.email,
         user.role,
         user.status,
+        user.temporary ? 1 : 0,
         user.createdAt ?? new Date().toISOString()
       );
     return this.getUser(user.id)!;
@@ -104,6 +113,11 @@ export class IdentityDirectory {
       | Record<string, unknown>
       | undefined;
     return row ? toUser(row) : undefined;
+  }
+
+  countUsers(): number {
+    const row = this.database.prepare("SELECT COUNT(*) AS total FROM ccx_users").get() as { total: number };
+    return Number(row.total ?? 0);
   }
 
   listUsers(): UserRecord[] {
@@ -168,7 +182,8 @@ function toUser(row: Record<string, unknown>): UserRecord {
     externalId: String(row.external_id ?? ""),
     id: String(row.id ?? ""),
     role: row.role === "admin" ? "admin" : "user",
-    status: row.status === "suspended" ? "suspended" : "active"
+    status: row.status === "suspended" ? "suspended" : "active",
+    temporary: row.temporary === 1
   };
 }
 

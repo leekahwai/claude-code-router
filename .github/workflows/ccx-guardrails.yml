@@ -47,6 +47,12 @@ jobs:
       - name: Contract tests
         run: npm run -w @ccx/harness test
 
+      - name: Desktop tests
+        run: npm run -w @ccx/desktop test
+
+      - name: Renderer unit tests
+        run: npm run -w @ccx/ui test
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -93,6 +99,29 @@ jobs:
           npm run test:cli -- --test-reporter=tap > cli.tap 2>&1
           set -e
           node packages/ccx-vendor/tools/upstream-suite-check.mjs cli cli.tap
+
+  # The app itself, launched. Everything above runs under plain Node or
+  # headless Chromium; none of it exercises the packaged main bundle, the
+  # sandboxed preload, or the file:// renderer load. This does, and it also
+  # asserts the first-run administrator is provisioned exactly once.
+  desktop-launch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # The main process opens SQLite, so the binding must match Electron's ABI.
+      - name: Build native SQLite binding (Electron ABI)
+        run: npm run rebuild:sqlite3
+
+      - name: Launch the Work/Code app
+        run: npm run -w @ccx/desktop test:electron
 
   # The renderer, driven in a real browser. A UI that only compiled is not a UI
   # that works — this catches wiring the reducer tests structurally cannot see.

@@ -11,6 +11,8 @@
     "@ccx/harness": "0.1.0"
   },
   "scripts": {
-    "test": "node ../ccx-vendor/tools/run-ccx-tests.mjs \"test/**/*.test.ts\""
+    "test": "node ../ccx-vendor/tools/run-ccx-tests.mjs \"test/**/*.test.ts\"",
+    "build:app": "node tools/build-app.mjs",
+    "test:electron": "node tools/build-app.mjs && node tools/electron-smoke.mjs"
   }
 }

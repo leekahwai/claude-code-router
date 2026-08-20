@@ -389,14 +389,14 @@ land before H0 because the session schema needs a real `user_id` from the first 
 | Phase | Track | Deliverable | Est. |
 |---|---|---|---|
 | **A1** Identity + roles ✅ | admin | Users, roles, credential bindings resolved server-side, the three access rules, and a database-enforced append-only access log. An SSO resolver drops in without a migration. | 2 wk |
-| **H0** Foundations | harness | Fork-isolation scaffolding (see `fork-isolation-strategy.md`): upstream remote, own workspace packages, vendor tooling, contract tests, one-line seam. Session store schema with `user_id`. MCP transports **vendored, not extracted** | 2–2.5 wk |
-| **H1** Turn loop | harness | Streaming client through the gateway, SSE parse, tool_use detection, multi-turn loop, cancellation. Test-driven, no UI | 2 wk |
-| **H2** MCP + tools | harness | Registry, pooling, namespacing, timeouts, builtin file/shell tools, permission model | 2 wk |
-| **H3** Skills | harness | Registry, frontmatter parsing, menu injection, on-demand load, per-harness roots | 1–1.5 wk |
-| **H4** Company context | harness | Config schema, admin page, reference store, read tool, version stamping | 1–1.5 wk |
+| **H0** Foundations ✅ | harness | Fork-isolation scaffolding (see `fork-isolation-strategy.md`): upstream remote, own workspace packages, vendor tooling, contract tests, one-line seam. Session store schema with `user_id`. MCP transports **vendored, not extracted** | 2–2.5 wk |
+| **H1** Turn loop ✅ | harness | Streaming client through the gateway, SSE parse, tool_use detection, multi-turn loop, cancellation. Test-driven, no UI | 2 wk |
+| **H2** MCP + tools ✅ | harness | Registry, pooling, namespacing, timeouts, builtin file/shell tools, permission model | 2 wk |
+| **H3** Skills ✅ | harness | Registry, frontmatter parsing, menu injection, on-demand load, per-harness roots | 1–1.5 wk |
+| **H4** Company context ✅ | harness | Config schema, admin page, reference store, read tool, version stamping | 1–1.5 wk |
 | **A2** Transcript sync | admin | Spool → push → ingest, modelled on `raw-trace-sync`; skip entirely on a central deployment | 1.5–2 wk |
-| **H5** Interface | harness | Work + Code views, streaming renderer, tool cards, approval prompts, skill chips, session list with retention notice | 3 wk |
-| **H6** Configuration page | harness | Per-mode profile binding, provider/model pickers, MCP and skill enablement, gating | 1 wk |
+| **H5** Interface ✅ | harness | Work + Code views, streaming renderer, tool cards, approval prompts, skill chips, session list with retention notice | 3 wk |
+| **H6** Configuration page ✅ | harness | Per-mode profile binding, provider/model pickers, MCP and skill enablement, gating | 1 wk |
 | **A3** Admin console | admin | Cross-user session browser extending Agent Analysis, transcript reader, search, export, delete-for-user, access-log view | 2–2.5 wk |
 | **H7** Metering + hardening | harness | Turn-to-usage correlation, per-mode and per-user widgets, retention enforcement, redaction, error paths | 1.5–2 wk |
 
@@ -404,6 +404,65 @@ land before H0 because the session schema needs a real `user_id` from the first 
 deployment. With A1 serialised in front and the rest overlapped, **≈ 17–19 weeks elapsed for one
 engineer**, or roughly 12–14 with two working the tracks in parallel. This still assumes the
 gateway-side policy and metering work (~4 weeks) lands first or alongside.
+
+---
+
+## 5.1 First run and launch
+
+### Provisioning the temporary administrator
+
+Somebody has to be able to administer a fresh install before Active Directory
+exists. On the very first launch — and only when the identity directory is
+completely empty — the app mints one account:
+
+- id `bootstrap-admin`, role `admin`, flagged `temporary`
+- a random key (`ccx-` + 192 bits, base64url), printed to the console **once**
+- only `sha256(key)` is stored, bound with `boundBy: "bootstrap"`
+
+The key is unrecoverable afterwards. Relaunch with `CCX_API_KEY` set to it to
+sign in as that administrator.
+
+Three properties make this a stopgap rather than a back door, and each is a test:
+
+| Property | Enforced by |
+|---|---|
+| Fires only into an empty directory — it can never mint a second administrator | `bootstrapAdmin` returns `undefined` when `countUsers() > 0` |
+| The raw key is never persisted, only its fingerprint | `bootstrap.test.ts` asserts the key string appears nowhere in the directory |
+| Revoking the binding locks the account out immediately | `bootstrap.test.ts` |
+
+Its assurance level is `claimed`, the same as any emailed key, so nothing about
+admin oversight is weakened relative to the caveat above. Replace it with an AD
+account and revoke its binding before rollout; `temporaryAccounts(directory)`
+lists what still needs replacing, and the console notice says so on every first
+run.
+
+### Building and launching
+
+Upstream's `build:assets` clears `packages/electron/dist/renderer`, which is
+where the Work/Code renderer lands. Running it alone leaves the window pointing
+at a deleted `index.html`. Rather than teach upstream's `build/build.mjs` about
+us — that would cost footprint budget — the ordering lives in our own script:
+
+```
+npm run -w @ccx/desktop build:app      # upstream assets, then our renderer
+npm run -w @ccx/desktop test:electron  # build:app, then launch and assert
+```
+
+`test:electron` launches the real app three times against a throwaway data
+directory. It is the only test that exercises the packaged main bundle, the
+sandboxed preload and the `file://` renderer load; everything else runs under
+plain Node or headless Chromium.
+
+| Run | Key | Must hold |
+|---|---|---|
+| 1 | none | Window loads, bridge exposed, root renders, `viewConfig` IPC round-trips, administrator provisioned exactly once, identity resolves to `bootstrap-admin` |
+| 2 | the provisioned key | Same, and bootstrap does **not** re-fire |
+| 3 | an unbound key | Window still loads; identity resolves to nobody |
+
+Two ordering bugs it caught on the first real launch: the renderer was deleted
+by a later build step, and the window opened before `ipcMain.handle` ran, so the
+first `viewConfig()` could lose the race with no way to retry. Both are the kind
+of thing only a real launch finds.
 
 ---
 

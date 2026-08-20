@@ -65,3 +65,7 @@ export { CredentialIdentityResolver, resolutionMessage } from "./identity/resolv
 export type { Identity, IdentityResolution, IdentityResolver } from "./identity/resolver";
 export { SessionAuthorizer } from "./identity/authorization";
 export type { Authorized, AuthorizationOptions } from "./identity/authorization";
+export {
+  BOOTSTRAP_ADMIN_ID, BOOTSTRAP_NOTICE, bootstrapAdmin, generateProvisioningKey, temporaryAccounts
+} from "./identity/bootstrap";
+export type { BootstrapOptions, BootstrapResult } from "./identity/bootstrap";
