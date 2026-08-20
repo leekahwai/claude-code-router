@@ -152,6 +152,45 @@ await page.waitForSelector(".composer button.primary");
 await page.evaluate(() => window.__emit({ sessionId: "other", text: "LEAKED", type: "text" }));
 assert.ok(!(await page.textContent(".transcript")).includes("LEAKED"));
 
+// The configuration page opens, offers the reasoning controls, and shows the
+// mapper's verdict rather than its own opinion.
+await page.click(".configure");
+await page.waitForSelector(".config");
+assert.equal(await page.textContent(".config-head h1 .badge"), "code");
+await page.selectOption("#reasoning-mode", "on");
+await page.selectOption("#reasoning-effort", "max");
+await page.waitForSelector(".saved");
+await page.click(".config-head button");
+await page.waitForSelector(".transcript");
+
+// A blocked configuration replaces the whole view rather than half-enabling it.
+const blocked = await browser.newPage();
+await blocked.addInitScript(() => {
+  window.ccx = {
+    answerPermission: async () => true,
+    createSession: async () => ({}),
+    interrupt: async () => true,
+    listSessions: async () => [],
+    messages: async () => [],
+    onPermissionAsk: () => () => undefined,
+    onTurnEvent: () => () => undefined,
+    startTurn: async () => ({}),
+    viewConfig: async () => ({
+      blockedReason: "No provider is configured yet.",
+      mode: "code",
+      model: "",
+      retentionNotice: "",
+      skills: [],
+      userId: "ada"
+    })
+  };
+});
+await blocked.goto(`file://${page404}`);
+await blocked.waitForSelector(".blocked");
+assert.match(await blocked.textContent(".blocked"), /No provider is configured/);
+assert.equal(await blocked.locator(".composer").count(), 0, "a blocked view must not offer a composer");
+await blocked.close();
+
 await browser.close();
 
 if (failures.length > 0) {

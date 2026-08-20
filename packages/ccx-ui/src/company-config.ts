@@ -11,7 +11,7 @@
  *     machine can edit or disable it. Making it authoritative needs a signed
  *     remote document or a central deployment.
  */
-import type { CompanyPack } from "@ccx/harness";
+import type { CompanyPack } from "@ccx/harness/company/pack";
 
 export const companyPackNotices = {
   advisory:

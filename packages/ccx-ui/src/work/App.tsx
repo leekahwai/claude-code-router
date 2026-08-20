@@ -12,6 +12,7 @@ import type {
   CcxTurnEvent,
   CcxViewConfig
 } from "@ccx/desktop/contract";
+import { Configuration, type ModeDraft } from "./Configuration";
 import {
   conversationReducer,
   initialConversation,
@@ -43,9 +44,19 @@ export function App() {
   const [sessions, setSessions] = useState<CcxSessionSummary[]>([]);
   const [sessionId, setSessionId] = useState("");
   const [state, dispatch] = useReducer(conversationReducer, initialConversation(""));
+  const [configuring, setConfiguring] = useState(false);
+  const [draft, setDraft] = useState<ModeDraft | undefined>();
 
   useEffect(() => {
-    void window.ccx.viewConfig().then(setConfig);
+    void window.ccx.viewConfig().then((loaded) => {
+      setConfig(loaded);
+      setDraft({
+        mcpServers: [],
+        model: loaded.model,
+        reasoning: { effort: "high", mode: "auto", showReasoning: loaded.mode === "code" },
+        skills: []
+      });
+    });
     void window.ccx.listSessions().then((list) => {
       setSessions(list);
       if (list[0]) {
@@ -96,6 +107,20 @@ export function App() {
     return <Blocked reason={config.blockedReason} />;
   }
 
+  if (configuring && draft && config) {
+    return (
+      <Configuration
+        availableMcpServers={[]}
+        availableModels={[{ id: config.model, model: config.model, provider: "" }]}
+        availableSkills={config.skills}
+        draft={draft}
+        mode={config.mode}
+        onChange={setDraft}
+        onClose={() => setConfiguring(false)}
+      />
+    );
+  }
+
   return (
     <div className="shell">
       <Sidebar
@@ -107,7 +132,12 @@ export function App() {
         sessions={sessions}
       />
       <main className="pane">
-        <Header model={config?.model ?? ""} mode={config?.mode ?? "code"} usage={active.usage} />
+        <Header
+          mode={config?.mode ?? "code"}
+          model={config?.model ?? ""}
+          onConfigure={() => setConfiguring(true)}
+          usage={active.usage}
+        />
         <Transcript state={active} />
         {active.skillsLoaded.length > 0 ? <SkillChips names={active.skillsLoaded} /> : null}
         <Composer
@@ -180,10 +210,12 @@ function Sidebar({
 function Header({
   mode,
   model,
+  onConfigure,
   usage
 }: {
   mode: "code" | "work";
   model: string;
+  onConfigure: () => void;
   usage: ConversationState["usage"];
 }) {
   return (
@@ -193,6 +225,9 @@ function Header({
       <span className="usage" title="Provider-reported once the turn completes">
         {usage.inputTokens.toLocaleString()} in · {usage.outputTokens.toLocaleString()} out
       </span>
+      <button className="configure" onClick={onConfigure} type="button">
+        Configuration
+      </button>
     </header>
   );
 }

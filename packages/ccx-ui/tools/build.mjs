@@ -35,6 +35,11 @@ const ccxAlias = {
 mkdirSync(rendererOut, { recursive: true });
 mkdirSync(mainOut, { recursive: true });
 
+// The renderer is deliberately built for the browser platform, with no node
+// builtins shimmed. That makes a boundary violation a loud build failure rather
+// than a quiet one: importing @ccx/harness's package index would drag SQLite,
+// node:fs and child_process into a sandboxed page. Renderer code imports the
+// pure subpaths instead.
 await esbuild.build({
   bundle: true,
   entryPoints: [path.join(uiRoot, "src", "work", "main.tsx")],

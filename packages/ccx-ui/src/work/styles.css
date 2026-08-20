@@ -144,3 +144,27 @@ button { font: inherit; }
 .blocked p { color: var(--muted); max-width: 46ch; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Configuration page */
+.configure {
+  background: none; border: 1px solid var(--hair); border-radius: var(--radius);
+  color: inherit; cursor: pointer; font-size: 13px; padding: 5px 12px;
+}
+.config { display: flex; flex-direction: column; gap: 22px; margin: 0 auto; max-width: 640px; padding: 28px 24px; overflow-y: auto; }
+.config-head { align-items: center; display: flex; gap: 12px; }
+.config-head h1 { align-items: center; display: flex; font-size: 20px; gap: 10px; margin: 0; }
+.config-head button { background: none; border: 1px solid var(--hair); border-radius: var(--radius); color: inherit; cursor: pointer; margin-left: auto; padding: 7px 14px; }
+.field { border: 0; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; }
+.field legend, .field > label { font-weight: 600; padding: 0; }
+.field select {
+  background: var(--surface); border: 1px solid var(--hair); border-radius: var(--radius);
+  color: inherit; font: inherit; max-width: 380px; padding: 8px 10px;
+}
+.row { align-items: center; display: flex; gap: 12px; }
+.row label { color: var(--muted); min-width: 72px; }
+.check { align-items: flex-start; display: flex; gap: 8px; }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+.hint.inline { display: block; }
+.hint.warn { color: var(--warn); }
+.diagnostics { color: var(--warn); font-size: 13px; margin: 4px 0 0; padding-left: 20px; }
+.saved { color: var(--accent); font-size: 13px; }

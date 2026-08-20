@@ -27,6 +27,8 @@ export const CCX_CHANNELS = {
   turnInterrupt: "ccx:turn:interrupt",
   /** invoke: config the view needs to render itself. */
   viewConfig: "ccx:view:config",
+  /** invoke: liveness check, used by the boot seam before a runtime exists. */
+  ping: "ccx:app:ping",
   /** stream (main -> renderer): incremental turn events. */
   turnEvent: "ccx:turn:event",
   /** ask (main -> renderer): a permission decision is needed. */

@@ -48,6 +48,18 @@ test("creates and reads back a session", () => {
   }
 });
 
+test("the credential fingerprint is readable, since sync resolves identity from it", () => {
+  const { close, value } = store();
+  try {
+    const created = value.createSession({ ...base, id: "s1" });
+    assert.equal(created.credentialFingerprint, credentialFingerprint("sk-test-key"));
+    assert.equal(value.getSession("s1")?.credentialFingerprint, created.credentialFingerprint);
+    assert.match(created.credentialFingerprint, /^[0-9a-f]{64}$/);
+  } finally {
+    close();
+  }
+});
+
 test("messages keep insertion order and get contiguous sequence numbers", () => {
   const { close, value } = store();
   try {

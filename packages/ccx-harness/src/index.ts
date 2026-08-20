@@ -49,3 +49,9 @@ export type { CompanyPack, CompanyReference } from "./company/pack";
 export {
   COMPANY_REFERENCE_TOOL_NAME, companyReferenceToolDefinition, executeCompanyReferenceTool
 } from "./company/tool";
+export { CcxConfigStore, defaultCcxConfig } from "./config/app-config";
+export type { CcxConfig, ModeSettings } from "./config/app-config";
+export {
+  availableModels, availableProviders, gatewayBaseUrl, resolvedMcpServers, resolveMode
+} from "./config/resolve";
+export type { ModelChoice, ResolvedMode, ResolveModeInput } from "./config/resolve";

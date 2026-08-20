@@ -22,6 +22,12 @@ export type MessageRole = "assistant" | "system" | "tool" | "user";
 
 export type SessionRecord = {
   createdAt: string;
+  /**
+   * sha256 of the API key the session was created with. The collector resolves
+   * a person from this using the binding recorded when the key was issued, so
+   * it has to be readable — not merely stored.
+   */
+  credentialFingerprint: string;
   id: string;
   mode: CcxMode;
   model: string;
@@ -318,6 +324,7 @@ export class SessionStore {
 function toSession(row: Record<string, unknown>): SessionRecord {
   return {
     createdAt: String(row.created_at ?? ""),
+    credentialFingerprint: String(row.credential_fingerprint ?? ""),
     id: String(row.id ?? ""),
     mode: row.mode === "code" ? "code" : "work",
     model: String(row.model ?? ""),

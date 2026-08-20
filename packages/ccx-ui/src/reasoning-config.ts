@@ -6,7 +6,8 @@
  * particular model accepts — that knowledge lives in one place, so adding a
  * model does not mean touching the interface.
  */
-import type { ReasoningEffort, ReasoningPreference } from "@ccx/harness";
+import type { ReasoningPreference } from "@ccx/harness/reasoning/map";
+import type { ReasoningEffort } from "@ccx/harness/reasoning/capabilities";
 
 export type ReasoningModeOption = {
   description: string;
