@@ -409,10 +409,24 @@ gateway-side policy and metering work (~4 weeks) lands first or alongside.
 
 ## 6. Decisions still open
 
+### Settled
+
+| Decision | Answer | Consequence |
+|---|---|---|
+| Central CCR or local + sync? | **Local + sync.** Users work on their own machines. | A2 transcript sync is in scope. Guardrails stay advisory with drift detection. Provider keys live on laptops, so OS-keychain storage moves from optional to required. |
+| Identity source | **Eventually SSO via Active Directory.** | An interim identity is needed. Bind the issued key to a person at issue time; the laptop sends a hash, never a name. `user_id` stays opaque so the AD resolver drops in later without a migration. |
+| Provider access | **One shared provider URL; per-user API key issued by email.** | The configuration page asks for a key, not a provider — the base URL is an admin-set default. The key doubles as the interim identity. |
+
+> ⚠️ **An emailed key is transferable.** It is adequate for cost attribution and
+> inadequate on its own for admin oversight: a forwarded key attributes one
+> person's transcripts to another. Bind key → person in the collector at issue
+> time, store only `sha256(key)` on the client, and treat attribution as
+> *claimed* until AD lands. Record that caveat wherever admin reads are shown.
+
+### Still open
+
 | Decision | Why it matters now | Recommendation |
 |---|---|---|
-| Central CCR or local + sync? | Decides whether A2 exists at all, and settles guardrail enforcement and key custody | Central, unless offline use is a real requirement |
-| Identity source | Typed names cannot support admin oversight | SSO; centrally issued per-user keys as the floor |
 | Retention period for transcripts | Schema and deletion job depend on it; needs a policy owner | Set before H0 ships the schema |
 | Whose skills does the app read? | Sets the root list and portability between modes | Claude roots by default, selectable |
 | Does Work get shell access? | The real security boundary between the modes | No. MCP and reads only |
