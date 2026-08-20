@@ -10,3 +10,9 @@ export { MessageAssembler, SseDecoder } from "./stream/anthropic-stream";
 export type {
   AssembledBlock, AssemblerEvent, SseEvent, StreamUsage, TextBlock, ThinkingBlock, ToolUseBlock
 } from "./stream/anthropic-stream";
+export { TurnLoop } from "./turn/turn-loop";
+export type { ExchangeResult, TurnLoopOptions } from "./turn/turn-loop";
+export { FunctionToolExecutor } from "./turn/tools";
+export type { ToolDefinition, ToolExecutor, ToolOutcome } from "./turn/tools";
+export { streamMessages, UpstreamHttpError } from "./turn/provider-client";
+export type { StreamMessagesRequest, StreamMessagesResult } from "./turn/provider-client";
