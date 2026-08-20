@@ -1,0 +1,17 @@
+{
+  "name": "@ccx/collector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The central endpoint laptops sync Work/Code transcripts to.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@ccx/harness": "0.1.0"
+  },
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test": "node ../ccx-vendor/tools/run-ccx-tests.mjs \"test/**/*.test.ts\""
+  }
+}

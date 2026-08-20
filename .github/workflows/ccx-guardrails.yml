@@ -53,6 +53,9 @@ jobs:
       - name: Renderer unit tests
         run: npm run -w @ccx/ui test
 
+      - name: Collector tests
+        run: npm run -w @ccx/collector test
+
       - name: Typecheck
         run: npm run typecheck
 

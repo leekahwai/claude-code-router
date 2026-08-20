@@ -66,6 +66,8 @@ export type ToolCallRecord = {
   id: number;
   name: string;
   result: unknown;
+  /** Stable across machines, unlike the local autoincrement `id`. */
+  seq: number;
   server: string;
   source: ToolCallSource;
   status: ToolCallStatus;
@@ -151,6 +153,7 @@ export class SessionStore {
       CREATE TABLE IF NOT EXISTS ccx_tool_calls (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         turn_id TEXT NOT NULL REFERENCES ccx_turns(id) ON DELETE CASCADE,
+        seq INTEGER NOT NULL DEFAULT 0,
         source TEXT NOT NULL,
         server TEXT NOT NULL DEFAULT '',
         name TEXT NOT NULL,
@@ -166,6 +169,42 @@ export class SessionStore {
       CREATE INDEX IF NOT EXISTS ccx_tool_calls_name_idx
         ON ccx_tool_calls(name);
     `);
+    this.migrateToolCallSequence();
+  }
+
+  /**
+   * `id` is a local AUTOINCREMENT, so two laptops both produce tool call 1 and
+   * the collector cannot tell them apart. `(turn_id, seq)` is stable across
+   * machines, which is what transcript sync ingests on. Messages already had
+   * `(session_id, seq)`; this gives tool calls the same shape.
+   */
+  private migrateToolCallSequence(): void {
+    const columns = this.database.prepare("PRAGMA table_info(ccx_tool_calls)").all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "seq")) {
+      this.database.exec("ALTER TABLE ccx_tool_calls ADD COLUMN seq INTEGER NOT NULL DEFAULT 0");
+      // Existing rows all carry seq 0, which would collide on the unique index.
+      // Insertion order within a turn is `id` order, so rank on that.
+      this.database.exec(`
+        UPDATE ccx_tool_calls SET seq = (
+          SELECT COUNT(*) FROM ccx_tool_calls older
+          WHERE older.turn_id = ccx_tool_calls.turn_id AND older.id < ccx_tool_calls.id
+        )
+      `);
+    }
+    this.database.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS ccx_tool_calls_turn_seq_idx
+        ON ccx_tool_calls(turn_id, seq);
+    `);
+  }
+
+  /**
+   * The shared connection, for stores in this package that must see the same
+   * transaction — today only the sync outbox, whose triggers have to fire
+   * inside the writes they observe. Not part of the surface anything outside
+   * `@ccx/harness` should reach for.
+   */
+  unsafeDatabase(): BetterSqliteDatabase {
+    return this.database;
   }
 
   createSession(input: CreateSessionInput): SessionRecord {
@@ -276,26 +315,35 @@ export class SessionStore {
     status?: ToolCallStatus;
     turnId: string;
   }): number {
-    const result = this.database
-      .prepare(`
-        INSERT INTO ccx_tool_calls (
-          turn_id, source, server, name, args_json, result_json,
-          duration_ms, approved_by, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `)
-      .run(
-        input.turnId,
-        input.source,
-        input.server ?? "",
-        input.name,
-        JSON.stringify(input.args ?? null),
-        JSON.stringify(input.result ?? null),
-        input.durationMs ?? 0,
-        input.approvedBy ?? "",
-        input.status ?? "running",
-        input.createdAt ?? new Date().toISOString()
-      );
-    return Number(result.lastInsertRowid);
+    // `seq` is assigned inside the write, so two concurrent tool calls on one
+    // turn cannot collide on UNIQUE(turn_id, seq).
+    const insert = this.database.transaction((): number => {
+      const next = this.database
+        .prepare("SELECT COALESCE(MAX(seq), -1) + 1 AS seq FROM ccx_tool_calls WHERE turn_id = ?")
+        .get(input.turnId) as { seq: number };
+      const result = this.database
+        .prepare(`
+          INSERT INTO ccx_tool_calls (
+            turn_id, seq, source, server, name, args_json, result_json,
+            duration_ms, approved_by, status, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          input.turnId,
+          next.seq,
+          input.source,
+          input.server ?? "",
+          input.name,
+          JSON.stringify(input.args ?? null),
+          JSON.stringify(input.result ?? null),
+          input.durationMs ?? 0,
+          input.approvedBy ?? "",
+          input.status ?? "running",
+          input.createdAt ?? new Date().toISOString()
+        );
+      return Number(result.lastInsertRowid);
+    });
+    return insert();
   }
 
   completeToolCall(id: number, status: ToolCallStatus, result: unknown, durationMs: number): void {
@@ -306,9 +354,144 @@ export class SessionStore {
 
   listToolCalls(turnId: string): ToolCallRecord[] {
     const rows = this.database
-      .prepare("SELECT * FROM ccx_tool_calls WHERE turn_id = ? ORDER BY id ASC")
+      .prepare("SELECT * FROM ccx_tool_calls WHERE turn_id = ? ORDER BY seq ASC")
       .all(turnId) as Array<Record<string, unknown>>;
     return rows.map(toToolCall);
+  }
+
+  /**
+   * Collector-side ingest of a synced session.
+   *
+   * `user_id` and `credential_fingerprint` are write-once. A second bundle
+   * naming an existing session can update its title or model, but cannot
+   * re-attribute it to a different person — otherwise a laptop could hand
+   * someone else's transcript a new owner after the fact.
+   */
+  upsertSession(input: CreateSessionInput & { updatedAt?: string }): void {
+    this.database
+      .prepare(`
+        INSERT INTO ccx_sessions (
+          id, user_id, credential_fingerprint, mode, title, profile_id,
+          provider, model, workspace_dir, policy_version, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          title = excluded.title,
+          profile_id = excluded.profile_id,
+          provider = excluded.provider,
+          model = excluded.model,
+          workspace_dir = excluded.workspace_dir,
+          policy_version = excluded.policy_version,
+          updated_at = excluded.updated_at
+      `)
+      .run(
+        input.id,
+        input.userId,
+        input.credentialFingerprint,
+        input.mode,
+        input.title ?? "",
+        input.profileId ?? "",
+        input.provider,
+        input.model,
+        input.workspaceDir ?? "",
+        input.policyVersion ?? "",
+        input.createdAt ?? new Date().toISOString(),
+        input.updatedAt ?? input.createdAt ?? new Date().toISOString()
+      );
+  }
+
+  /**
+   * Collector-side ingest of one message.
+   *
+   * Write-once on purpose: a laptop cannot revise a transcript the collector
+   * already holds. Returns false when the message was already present.
+   */
+  upsertMessage(input: { content: unknown; createdAt: string; role: MessageRole; seq: number; sessionId: string }): boolean {
+    const result = this.database
+      .prepare(`
+        INSERT INTO ccx_messages (session_id, seq, role, content_json, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(session_id, seq) DO NOTHING
+      `)
+      .run(input.sessionId, input.seq, input.role, JSON.stringify(input.content ?? null), input.createdAt);
+    return Number(result.changes ?? 0) > 0;
+  }
+
+  /** Collector-side ingest of one turn. `session_id` is write-once. */
+  upsertTurn(input: TurnRecord): void {
+    this.database
+      .prepare(`
+        INSERT INTO ccx_turns (id, session_id, request_id, status, started_at, ended_at, error)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          request_id = excluded.request_id,
+          status = excluded.status,
+          ended_at = excluded.ended_at,
+          error = excluded.error
+      `)
+      .run(input.id, input.sessionId, input.requestId, input.status, input.startedAt, input.endedAt, input.error);
+  }
+
+  /**
+   * Collector-side ingest of one tool call, keyed on `(turn_id, seq)` because
+   * `id` is a per-machine autoincrement. Name and arguments are write-once;
+   * only the outcome may be revised, which is the one thing that legitimately
+   * changes after a call is recorded.
+   */
+  upsertToolCall(input: Omit<ToolCallRecord, "id"> & { createdAt: string }): void {
+    this.database
+      .prepare(`
+        INSERT INTO ccx_tool_calls (
+          turn_id, seq, source, server, name, args_json, result_json,
+          duration_ms, approved_by, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(turn_id, seq) DO UPDATE SET
+          result_json = excluded.result_json,
+          duration_ms = excluded.duration_ms,
+          approved_by = excluded.approved_by,
+          status = excluded.status
+      `)
+      .run(
+        input.turnId,
+        input.seq,
+        input.source,
+        input.server,
+        input.name,
+        JSON.stringify(input.args ?? null),
+        JSON.stringify(input.result ?? null),
+        input.durationMs,
+        input.approvedBy,
+        input.status,
+        input.createdAt
+      );
+  }
+
+  /** One message by its cross-machine key, for hydrating a sync bundle. */
+  getMessage(sessionId: string, seq: number): MessageRecord | undefined {
+    const row = this.database
+      .prepare("SELECT * FROM ccx_messages WHERE session_id = ? AND seq = ?")
+      .get(sessionId, seq) as Record<string, unknown> | undefined;
+    return row ? toMessage(row) : undefined;
+  }
+
+  /** One tool call by its cross-machine key, for hydrating a sync bundle. */
+  getToolCall(turnId: string, seq: number): ToolCallRecord | undefined {
+    const row = this.database
+      .prepare("SELECT * FROM ccx_tool_calls WHERE turn_id = ? AND seq = ?")
+      .get(turnId, seq) as Record<string, unknown> | undefined;
+    return row ? toToolCall(row) : undefined;
+  }
+
+  hasSession(id: string): boolean {
+    return Boolean(this.database.prepare("SELECT 1 FROM ccx_sessions WHERE id = ?").get(id));
+  }
+
+  hasTurn(id: string): boolean {
+    return Boolean(this.database.prepare("SELECT 1 FROM ccx_turns WHERE id = ?").get(id));
+  }
+
+  /** Run `work` in one transaction, so a rejected bundle leaves nothing behind. */
+  transaction<T>(work: () => T): T {
+    return this.database.transaction(work)();
   }
 
   /** Deleting a session takes its messages, turns and tool calls with it. */
@@ -369,6 +552,7 @@ function toToolCall(row: Record<string, unknown>): ToolCallRecord {
     id: Number(row.id ?? 0),
     name: String(row.name ?? ""),
     result: parseJson(row.result_json),
+    seq: Number(row.seq ?? 0),
     server: String(row.server ?? ""),
     source: String(row.source ?? "builtin") as ToolCallSource,
     status: String(row.status ?? "running") as ToolCallStatus,

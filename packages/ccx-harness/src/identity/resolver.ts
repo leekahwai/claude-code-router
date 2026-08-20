@@ -29,6 +29,18 @@ export type IdentityResolver = {
 };
 
 /**
+ * Resolution from a fingerprint alone.
+ *
+ * The collector never sees raw keys — a laptop sends sha256(key) and nothing
+ * else — so it needs this narrower shape. Kept separate from `IdentityResolver`
+ * because an SSO resolver will validate a token instead and has no fingerprint
+ * to offer.
+ */
+export type FingerprintResolver = {
+  resolveFingerprint(fingerprint: string): IdentityResolution;
+};
+
+/**
  * Interim resolver: a key bound to a person by an administrator at issue time.
  *
  * The key is transferable, so anything it identifies is *claimed*. That is
@@ -36,11 +48,14 @@ export type IdentityResolver = {
  * which is why the assurance travels with the identity rather than being
  * quietly dropped.
  */
-export class CredentialIdentityResolver implements IdentityResolver {
+export class CredentialIdentityResolver implements IdentityResolver, FingerprintResolver {
   constructor(private readonly directory: IdentityDirectory) {}
 
   resolve(apiKey: string): IdentityResolution {
-    const fingerprint = credentialFingerprint(apiKey);
+    return this.resolveFingerprint(credentialFingerprint(apiKey));
+  }
+
+  resolveFingerprint(fingerprint: string): IdentityResolution {
     const binding = this.directory.getBinding(fingerprint);
     if (!binding) {
       return { ok: false, reason: "no-binding" };

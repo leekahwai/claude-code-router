@@ -394,7 +394,7 @@ land before H0 because the session schema needs a real `user_id` from the first 
 | **H2** MCP + tools ✅ | harness | Registry, pooling, namespacing, timeouts, builtin file/shell tools, permission model | 2 wk |
 | **H3** Skills ✅ | harness | Registry, frontmatter parsing, menu injection, on-demand load, per-harness roots | 1–1.5 wk |
 | **H4** Company context ✅ | harness | Config schema, admin page, reference store, read tool, version stamping | 1–1.5 wk |
-| **A2** Transcript sync | admin | Spool → push → ingest, modelled on `raw-trace-sync`; skip entirely on a central deployment | 1.5–2 wk |
+| **A2** Transcript sync ✅ | admin | Spool → push → ingest, modelled on `raw-trace-sync`; skip entirely on a central deployment | 1.5–2 wk |
 | **H5** Interface ✅ | harness | Work + Code views, streaming renderer, tool cards, approval prompts, skill chips, session list with retention notice | 3 wk |
 | **H6** Configuration page ✅ | harness | Per-mode profile binding, provider/model pickers, MCP and skill enablement, gating | 1 wk |
 | **A3** Admin console | admin | Cross-user session browser extending Agent Analysis, transcript reader, search, export, delete-for-user, access-log view | 2–2.5 wk |
@@ -463,6 +463,103 @@ Two ordering bugs it caught on the first real launch: the renderer was deleted
 by a later build step, and the window opened before `ipcMain.handle` ran, so the
 first `viewConfig()` could lose the race with no way to retry. Both are the kind
 of thing only a real launch finds.
+
+---
+
+## 5.2 Transcript sync
+
+Local-plus-sync means an administrator cannot read what never leaves the laptop.
+A2 is the pipe that fixes that, and the whole design turns on one property:
+**a device cannot say who it is.**
+
+### Shape
+
+```
+laptop                                    collector
+──────                                    ─────────
+ccx_sessions ─┐
+ccx_messages  ├─ triggers ─► ccx_sync_outbox
+ccx_turns     │                   │
+ccx_tool_calls┘                   │ coalesce by (entity, key)
+                                  ▼
+                            redact secrets
+                                  ▼
+                     POST /__ccx/session-sync  ──►  resolve fingerprint → person
+                     x-ccx-session-sync: <token>    upsert into the same schema
+                                  ◄── 200 ──────────── receipt (bundleId dedupe)
+                                  ▼
+                          ack, per key
+```
+
+### Why it differs from `raw-trace-sync.ts`
+
+The upstream spool writes to disk because its source — an in-flight HTTP trace —
+is gone if it is not written down. Ours is already a durable SQLite database, so
+a second on-disk copy would double storage and invent a crash-consistency
+problem we do not have. The *pattern* is copied (durable queue, bundling,
+authenticated POST, dedupe on arrival, retry with cooldown, dead-lettering); the
+*mechanism* is a table.
+
+Enqueue is by trigger, not by a call in `store.ts`, for two reasons: it happens
+inside the same transaction as the write, so a crash between them is impossible;
+and no future write path can forget it. The access log already uses triggers for
+its append-only guarantee.
+
+### The properties that carry the oversight claim
+
+| Property | How |
+|---|---|
+| A laptop cannot file transcripts under another person | The wire format has no `userId` field at all. The collector resolves from `credentialFingerprint` via the binding an administrator recorded at issue time. |
+| A session cannot be re-attributed later | `user_id` and `credential_fingerprint` are write-once in `upsertSession`; only metadata updates. |
+| A laptop cannot revise history it already sent | Messages ingest `ON CONFLICT DO NOTHING`. Tool calls may update their outcome and nothing else. |
+| A revoked key stops depositing immediately | Resolution runs per bundle, not per device enrolment. |
+| One stale key does not block everyone | An unresolvable session is dropped with its children; the rest of the bundle still lands. |
+| Secrets do not reach the collector | `redactSecrets` runs before the bundle exists, so a collector compromise cannot yield credentials that were never sent. The device's own key is passed as a literal. |
+| Nothing is lost on a crash or a dropped ack | Rows leave the outbox only after the collector accepts them. The failure mode is a duplicate bundle, deduped on `bundleId`. |
+| One poisoned batch cannot wedge the queue | A permanent rejection (4xx other than 408/429) dead-letters and acks; transient failures retry with a doubling cooldown, forever. |
+
+Two bugs the tests caught, both of the kind that would have shown up as quiet
+data loss months later:
+
+- **Acking by a global watermark deleted undelivered rows.** Appending a message
+  also bumps its session's `updated_at`, so the session's coalesced entry can
+  carry a *higher* outbox id than the message queued just before it. `DELETE
+  WHERE id <= max` then retired that message without ever shipping it. Ack is
+  now bounded per key.
+- **`ccx_tool_calls.id` is a per-machine autoincrement**, so two laptops both
+  produce tool call 1 and the collector cannot tell them apart. Tool calls now
+  carry `(turn_id, seq)`, the same shape messages already had, with a migration
+  that ranks existing rows before the unique index goes on.
+
+### Deliberate non-goals
+
+- **A local delete does not retract the collector's copy.** There is no delete
+  trigger. The collector is the record for oversight; retention there governs.
+  Deletion-for-a-user is an administrator action and belongs to A3.
+- **Assurance stays `claimed`.** Sync does not improve it. An emailed key is
+  transferable, so the collector records who the *key* is bound to, not who
+  typed. SSO raises this; nothing in the sync path changes when it does.
+- **The collector token sits in a plaintext config file**, the same custody
+  problem as the provider key. H7 moves both to the OS keychain. The token
+  guards the transport only — identity still comes from bindings, so a leaked
+  token does not let anyone forge attribution.
+
+### Running it
+
+```
+CCX_COLLECTOR_DATA_DIR=/var/lib/ccx CCX_COLLECTOR_TOKEN=... \
+  npm run -w @ccx/collector start
+```
+
+`@ccx/collector` is a bare `node:http` server so a pilot has something to point
+laptops at on day one. A real deployment more likely mounts
+`createSessionSyncHandler` behind its own ingress, which is why the handler is
+exported separately. Either way the collector stores into the *same* schema the
+desktop app uses, so A3 reads it through `SessionAuthorizer` unchanged.
+
+Enabling sync on a laptop is one config block; the first launch after enabling
+backfills whatever history is already on disk, once, marked by
+`sync.backfilledAt` so a relaunch does not re-ship everything.
 
 ---
 

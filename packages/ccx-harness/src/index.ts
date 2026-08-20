@@ -49,8 +49,8 @@ export type { CompanyPack, CompanyReference } from "./company/pack";
 export {
   COMPANY_REFERENCE_TOOL_NAME, companyReferenceToolDefinition, executeCompanyReferenceTool
 } from "./company/tool";
-export { CcxConfigStore, defaultCcxConfig } from "./config/app-config";
-export type { CcxConfig, ModeSettings } from "./config/app-config";
+export { CcxConfigStore, defaultCcxConfig, ensureDeviceId } from "./config/app-config";
+export type { CcxConfig, ModeSettings, SyncSettings } from "./config/app-config";
 export {
   availableModels, availableProviders, gatewayBaseUrl, resolvedMcpServers, resolveMode
 } from "./config/resolve";
@@ -62,10 +62,26 @@ export type {
 export { AccessLog } from "./identity/access-log";
 export type { AccessAction, AccessLogEntry } from "./identity/access-log";
 export { CredentialIdentityResolver, resolutionMessage } from "./identity/resolver";
-export type { Identity, IdentityResolution, IdentityResolver } from "./identity/resolver";
+export type { FingerprintResolver, Identity, IdentityResolution, IdentityResolver } from "./identity/resolver";
 export { SessionAuthorizer } from "./identity/authorization";
 export type { Authorized, AuthorizationOptions } from "./identity/authorization";
 export {
   BOOTSTRAP_ADMIN_ID, BOOTSTRAP_NOTICE, bootstrapAdmin, generateProvisioningKey, temporaryAccounts
 } from "./identity/bootstrap";
 export type { BootstrapOptions, BootstrapResult } from "./identity/bootstrap";
+
+// Transcript sync (A2): laptop → collector.
+export { SyncOutbox } from "./sync/outbox";
+export type { OutboxDrain, OutboxEntry, SyncEntity } from "./sync/outbox";
+export {
+  maxSyncStringLength, parseBundle, redactSecrets, redactString, redactionMarker,
+  SESSION_SYNC_SCHEMA, SESSION_SYNC_TOKEN_HEADER, truncationMarker
+} from "./sync/bundle";
+export type {
+  BundleParse, SessionSyncBundle, SyncMessage, SyncSession, SyncToolCall, SyncTurn
+} from "./sync/bundle";
+export { HttpSyncTransport, SessionSyncClient } from "./sync/client";
+export type { FlushResult, SessionSyncClientOptions, SyncSendResult, SyncTransport } from "./sync/client";
+export { SessionSyncCollector } from "./sync/collector";
+export type { CollectorOptions, IngestOutcome } from "./sync/collector";
+export { createSessionSyncHandler, maxSyncBodyBytes } from "./sync/http";

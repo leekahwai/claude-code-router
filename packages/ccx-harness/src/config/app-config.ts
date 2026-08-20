@@ -5,6 +5,7 @@
  * owning an upstream migration path forever. We read CCR's config for providers
  * and models, and store our own choices beside it.
  */
+import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { defaultReasoningPreference, type ReasoningPreference } from "../reasoning/map";
@@ -27,8 +28,32 @@ export type ModeSettings = {
   profileId: string;
 };
 
+/**
+ * Where transcripts go for administrator retrieval.
+ *
+ * `token` is a shared secret sitting in a plaintext config file, which is the
+ * same custody problem as the provider key on a laptop. H7 moves both to the OS
+ * keychain; until then the secret is worth no more than the transport it
+ * guards, and the collector still resolves identity from bindings rather than
+ * trusting anything a device presents.
+ */
+export type SyncSettings = {
+  /**
+   * When the one-off enrolment of pre-existing sessions ran. Empty means it has
+   * not; without this marker every launch would re-queue the whole history.
+   */
+  backfilledAt: string;
+  /** Empty disables sync entirely; nothing is queued and nothing is sent. */
+  collectorUrl: string;
+  /** Stable per install, generated on first use. Diagnostic, never identity. */
+  deviceId: string;
+  intervalMs: number;
+  token: string;
+};
+
 export type CcxConfig = {
   modes: Record<CcxMode, ModeSettings>;
+  sync: SyncSettings;
   /** Where Code sessions run. Empty until the user picks one. */
   workspaceDir: string;
   /** Display name only; identity comes from the credential fingerprint. */
@@ -56,6 +81,7 @@ export const defaultCcxConfig: CcxConfig = {
       skills: []
     }
   },
+  sync: { backfilledAt: "", collectorUrl: "", deviceId: "", intervalMs: 30_000, token: "" },
   userDisplayName: "",
   workspaceDir: ""
 };
@@ -75,6 +101,7 @@ export class CcxConfigStore {
           code: mergeMode(defaultCcxConfig.modes.code, parsed.modes?.code),
           work: mergeMode(defaultCcxConfig.modes.work, parsed.modes?.work)
         },
+        sync: mergeSync(parsed.sync),
         userDisplayName: typeof parsed.userDisplayName === "string" ? parsed.userDisplayName : "",
         workspaceDir: typeof parsed.workspaceDir === "string" ? parsed.workspaceDir : ""
       };
@@ -97,6 +124,39 @@ export class CcxConfigStore {
     this.save(next);
     return next;
   }
+}
+
+/**
+ * Ensure the install has a device id, minting one the first time sync is read.
+ *
+ * Returns the config so the caller can persist it; the id is diagnostic — it
+ * says which laptop a bundle came from — and is never used to decide identity.
+ */
+export function ensureDeviceId(store: CcxConfigStore): CcxConfig {
+  const config = store.load();
+  if (config.sync.deviceId) {
+    return config;
+  }
+  const next: CcxConfig = { ...config, sync: { ...config.sync, deviceId: randomUUID() } };
+  store.save(next);
+  return next;
+}
+
+function mergeSync(stored: Partial<SyncSettings> | undefined): SyncSettings {
+  const base = defaultCcxConfig.sync;
+  if (!stored) {
+    return { ...base };
+  }
+  const interval = typeof stored.intervalMs === "number" && stored.intervalMs >= 1_000
+    ? stored.intervalMs
+    : base.intervalMs;
+  return {
+    backfilledAt: typeof stored.backfilledAt === "string" ? stored.backfilledAt : base.backfilledAt,
+    collectorUrl: typeof stored.collectorUrl === "string" ? stored.collectorUrl : base.collectorUrl,
+    deviceId: typeof stored.deviceId === "string" ? stored.deviceId : base.deviceId,
+    intervalMs: interval,
+    token: typeof stored.token === "string" ? stored.token : base.token
+  };
 }
 
 /**

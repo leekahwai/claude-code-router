@@ -20,11 +20,13 @@ import {
   IdentityDirectory,
   SessionAuthorizer,
   SessionStore,
+  SessionSyncClient,
   TurnMetricsStore
 } from "@ccx/harness";
 import { loadAppConfig } from "@ccr/core/config/config";
 import type { AppConfig } from "@ccr/core/contracts/app";
 import { CCX_CHANNELS } from "./contract";
+import { startTranscriptSync } from "./sync-wiring";
 import { registerCcxIpc, unregisterCcxIpc } from "./ipc";
 import { CcxRuntime } from "./runtime";
 import { runCcxSmoke } from "./smoke";
@@ -32,11 +34,14 @@ import { createCcxWindow, getCcxWindow } from "./window";
 
 let booted = false;
 let runtime: CcxRuntime | undefined;
+let syncClient: SessionSyncClient | undefined;
 
 export type BootResult = {
   /** Present only on the very first run, and only once. */
   bootstrapApiKey?: string;
   runtime: CcxRuntime;
+  /** Present only when a collector is configured. */
+  sync?: SessionSyncClient;
 };
 
 /**
@@ -59,12 +64,15 @@ export function createCcxRuntime(options: {
   // First run only: somebody has to be able to administer the install.
   const bootstrap = bootstrapAdmin(identityDirectory);
 
+  const config = new CcxConfigStore(dataDir);
+  const sync = startTranscriptSync({ apiKey: options.apiKey, config, sessions });
+
   const created = new CcxRuntime({
     apiKey: options.apiKey || bootstrap?.apiKey || "",
     ask: (ask) => send(CCX_CHANNELS.permissionAsk, ask),
     authorizer: new SessionAuthorizer({ accessLog, sessions }),
     companyPack: new CompanyPackStore(path.join(dataDir, "company")),
-    config: new CcxConfigStore(dataDir),
+    config,
     emit: (event) => send(CCX_CHANNELS.turnEvent, event),
     identityResolver: new CredentialIdentityResolver(identityDirectory),
     loadAppConfig: options.loadConfig,
@@ -74,8 +82,13 @@ export function createCcxRuntime(options: {
     sessions
   });
 
-  return { ...(bootstrap ? { bootstrapApiKey: bootstrap.apiKey } : {}), runtime: created };
+  return {
+    ...(bootstrap ? { bootstrapApiKey: bootstrap.apiKey } : {}),
+    runtime: created,
+    ...(sync ? { sync } : {})
+  };
 }
+
 
 function openCcxWindow(): void {
   if (process.env.CCX_OPEN_WINDOW !== "1" && process.env.CCX_SMOKE !== "1") {
@@ -113,6 +126,7 @@ export function bootCcx(): void {
       projectDirectory: process.env.CCX_PROJECT_DIR ?? app.getPath("home")
     });
     runtime = built.runtime;
+    syncClient = built.sync;
 
     if (built.bootstrapApiKey) {
       // Printed once. It is not recoverable afterwards; the directory holds
@@ -145,6 +159,7 @@ export function bootCcx(): void {
   }
 
   app.once("before-quit", () => {
+    syncClient?.stop();
     void runtime?.stop();
     unregisterCcxIpc();
   });

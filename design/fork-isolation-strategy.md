@@ -124,7 +124,7 @@ Every capability the product needs, the naive implementation, and the isolated o
 | 11 | Dashboard + admin console | `dashboard.tsx` (5,281 lines) | our own pages in `acme-ui` | **0** |
 | 12 | MCP client | extract from `toolhub-mcp.ts` | vendored copy | **0** |
 | 13 | Skill roots | refactor `cli-middleware-runtime.ts` | vendored 12-line table | **0** |
-| 14 | Transcript sync | modify `raw-trace-sync.ts` | vendored pattern on a plugin-registered gateway route | **0** |
+| 14 | Transcript sync | modify `raw-trace-sync.ts` | pattern copied, not code: our own outbox table + `@ccx/collector` service. See spec §5.2 | **0** ✅ |
 | 15 | Provider / model config | `providers.tsx` | read `AppConfig`; our page only selects | **0** |
 | 16 | Our own configuration | add to `AppConfig` in `contracts/app.ts` | our own config store | **0** |
 | 17 | Packaging | `electron-builder.json` | our output already lands in `packages/electron/dist` | **0** |
@@ -324,7 +324,7 @@ H0 was "session store schema plus extract the MCP client". Under this strategy i
 | Step | Deliverable |
 |---|---|
 | 0.1 | `upstream` remote, `vendor-baseline` tag, documented merge policy |
-| 0.2 | Four workspace packages, non-`@ccr` scope, `exports` → source, zero build edits |
+| 0.2 | Five workspace packages, non-`@ccr` scope, `exports` → source, zero build edits |
 | 0.3 | The one-line seam in `main-app.ts`; our window, preload and IPC namespace booting empty |
 | 0.4 | Vendor tooling: header convention, `check` / `sync` / `baseline`, footprint budget, wired into CI |
 | 0.5 | First vendored files — MCP transports and skill roots — with provenance |
