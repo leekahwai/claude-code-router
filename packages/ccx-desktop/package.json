@@ -6,5 +6,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@ccx/harness": "0.1.0"
+  },
+  "scripts": {
+    "test": "node ../ccx-vendor/tools/run-ccx-tests.mjs \"test/**/*.test.ts\""
   }
 }

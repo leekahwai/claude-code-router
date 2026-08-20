@@ -8,9 +8,12 @@
     "./*": "./src/*.ts"
   },
   "dependencies": {
-    "@ccx/harness": "0.1.0"
+    "@ccx/harness": "0.1.0",
+    "@ccx/desktop": "0.1.0"
   },
   "scripts": {
-    "test": "node ../ccx-vendor/tools/run-ccx-tests.mjs \"test/**/*.test.ts\""
+    "test": "node ../ccx-vendor/tools/run-ccx-tests.mjs \"test/**/*.test.ts\"",
+    "build": "node tools/build.mjs",
+    "test:render": "node tools/build.mjs && node test/render-smoke.mjs"
   }
 }

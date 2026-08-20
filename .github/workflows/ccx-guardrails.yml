@@ -93,3 +93,23 @@ jobs:
           npm run test:cli -- --test-reporter=tap > cli.tap 2>&1
           set -e
           node packages/ccx-vendor/tools/upstream-suite-check.mjs cli cli.tap
+
+  # The renderer, driven in a real browser. A UI that only compiled is not a UI
+  # that works — this catches wiring the reducer tests structurally cannot see.
+  renderer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build and drive the Work/Code renderer
+        run: npm run -w @ccx/ui test:render
