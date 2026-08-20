@@ -2,3 +2,4 @@ export { ccxMcpClientName, createMcpClient, HttpMcpClient, SseMcpClient, StdioMc
 export type { JsonRpcRequest, McpClient, ToolDefinition } from "./core/mcp/mcp-client";
 export { discoverSkills, skillRoots } from "./core/agents/skill-roots";
 export type { SkillHarness, SkillRef, SkillSource } from "./core/agents/skill-roots";
+export { countTokens, estimateTextTokens } from "./core/gateway/token-estimate";

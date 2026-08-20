@@ -8,6 +8,12 @@
  * check is explicit rather than relying on that.
  */
 import type { McpRegistry } from "../mcp/registry";
+import type { CompanyPackStore } from "../company/pack";
+import {
+  COMPANY_REFERENCE_TOOL_NAME,
+  companyReferenceToolDefinition,
+  executeCompanyReferenceTool
+} from "../company/tool";
 import type { SkillRegistry } from "../skills/registry";
 import { executeSkillTool, SKILL_TOOL_NAME, skillToolDefinition } from "../skills/tool";
 import type { ToolDefinition, ToolExecutor, ToolOutcome } from "../turn/tools";
@@ -16,6 +22,8 @@ import { denialMessage, PermissionGate, type ModePolicy } from "./permissions";
 
 export type HarnessToolsOptions = {
   builtin?: BuiltinTools;
+  /** Present in Code mode when a company pack is enabled. */
+  companyPack?: CompanyPackStore;
   gate: PermissionGate;
   mcp?: McpRegistry;
   policy: ModePolicy;
@@ -26,7 +34,11 @@ export class HarnessTools implements ToolExecutor {
   constructor(private readonly options: HarnessToolsOptions) {}
 
   definitions(): ToolDefinition[] {
+    const references = this.options.companyPack?.load();
     return [
+      ...(references?.enabled && references.references.length > 0
+        ? [companyReferenceToolDefinition(references.references.map((entry) => entry.path))]
+        : []),
       ...(this.options.skills && this.options.skills.list().length > 0
         ? [skillToolDefinition(this.options.skills)]
         : []),
@@ -36,7 +48,13 @@ export class HarnessTools implements ToolExecutor {
   }
 
   async execute(call: { input: unknown; name: string }, signal?: AbortSignal): Promise<ToolOutcome> {
-    const { builtin, mcp, skills } = this.options;
+    const { builtin, companyPack, mcp, skills } = this.options;
+
+    // Reading published reference material is not gated: it is text the
+    // company itself put in front of the user.
+    if (companyPack && call.name === COMPANY_REFERENCE_TOOL_NAME) {
+      return executeCompanyReferenceTool(companyPack, call.input);
+    }
 
     // Loading a skill only reads text the user already installed, so it is not
     // gated. What the skill then asks for still is.

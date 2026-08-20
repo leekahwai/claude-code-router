@@ -11,3 +11,6 @@ export {
   defaultReasoningByMode, reasoningEffortOptions, reasoningFieldState, reasoningModeOptions
 } from "./reasoning-config";
 export type { ReasoningEffortOption, ReasoningFieldState, ReasoningModeOption } from "./reasoning-config";
+
+export { companyPackNotices, draftFromPack, driftSummary, validateCompanyPack } from "./company-config";
+export type { CompanyPackDraft, CompanyPackValidation } from "./company-config";

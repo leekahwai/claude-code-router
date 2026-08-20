@@ -25,6 +25,8 @@ export type TurnLoopOptions = {
   maxTokens?: number;
   metrics?: TurnMetricsStore;
   model: string;
+  /** Tokens the company pack contributed, recorded per turn. */
+  policyTokens?: number;
   policyVersion?: string;
   /** Where reasoning capabilities come from for the routed model. */
   reasoningCapabilities?: CapabilitySources;
@@ -86,6 +88,9 @@ export class TurnLoop {
             apiKey: this.options.apiKey,
             baseUrl: this.options.baseUrl,
             body: this.requestBody(input.sessionId),
+            ...(this.options.policyVersion
+              ? { extraHeaders: { "x-ccx-company-policy": this.options.policyVersion } }
+              : {}),
             requestId,
             signal: input.signal
           },
@@ -212,6 +217,7 @@ export class TurnLoop {
     this.options.metrics?.record({
       mcpCalls: result.toolUses.length,
       mode: "code",
+      policyTokens: this.options.policyTokens ?? 0,
       policyVersion: this.options.policyVersion ?? "",
       requestId,
       sessionId,

@@ -94,6 +94,23 @@
         }
       ],
       "generated": false
+    },
+    {
+      "output": "src/core/gateway/token-estimate.ts",
+      "owner": "platform-team",
+      "generated": false,
+      "why": "Our policy_tokens must be comparable with CCR estimated_input_tokens. Reimplementing the estimator would make the prompt-inflation metric compare two different rulers.",
+      "modifications": "Hand-adapted: exported, and countUnknownTokens generalised for arbitrary values. The estimateTextTokens arithmetic is byte-identical.",
+      "regions": [
+        {
+          "id": "estimate-text-tokens",
+          "path": "packages/core/src/gateway/claude-code-router-plugin.ts",
+          "startPattern": "^function estimateTextTokens\\(text: string\\): number \\{$",
+          "endPattern": "^\\}$",
+          "sha256": "988d2a4441fdb23c1a897d5852a80413dc9bdf566ce0ebf67e378d6b864e358c",
+          "baselineLines": "1640-1644"
+        }
+      ]
     }
   ],
   "baselineCommit": "fcf3d85"

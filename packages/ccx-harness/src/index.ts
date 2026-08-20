@@ -41,3 +41,11 @@ export { executeSkillTool, SKILL_TOOL_NAME, skillToolDefinition } from "./skills
 export { assembleSystemPrompt, stableSystemPrefix } from "./context/assemble";
 export type { SystemLayers } from "./context/assemble";
 export type { WorkspaceAccess, WorkspaceOptions } from "./tools/workspace";
+export {
+  companyContextLayer, companyPolicyTokens, CompanyPackStore, emptyCompanyPack,
+  safeReferencePath, sixTierFrameworkTemplate
+} from "./company/pack";
+export type { CompanyPack, CompanyReference } from "./company/pack";
+export {
+  COMPANY_REFERENCE_TOOL_NAME, companyReferenceToolDefinition, executeCompanyReferenceTool
+} from "./company/tool";
