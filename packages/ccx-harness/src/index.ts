@@ -16,3 +16,11 @@ export { FunctionToolExecutor } from "./turn/tools";
 export type { ToolDefinition, ToolExecutor, ToolOutcome } from "./turn/tools";
 export { streamMessages, UpstreamHttpError } from "./turn/provider-client";
 export type { StreamMessagesRequest, StreamMessagesResult } from "./turn/provider-client";
+export { defaultReasoningPreference, mapReasoning } from "./reasoning/map";
+export type { MappedReasoning, MapReasoningInput, ReasoningDiagnostic, ReasoningPreference } from "./reasoning/map";
+export {
+  normalizeModelKey, REASONING_EFFORTS, resolveReasoningCapability, unsupportedReasoning
+} from "./reasoning/capabilities";
+export type {
+  CapabilitySources, CatalogReasoning, ModelReasoningCapability, ReasoningEffort, ThinkingControl
+} from "./reasoning/capabilities";

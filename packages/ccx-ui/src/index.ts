@@ -6,3 +6,8 @@
  */
 export const CCX_UI_PAGES = ["work", "code", "configuration", "admin"] as const;
 export type CcxUiPage = (typeof CCX_UI_PAGES)[number];
+
+export {
+  defaultReasoningByMode, reasoningEffortOptions, reasoningFieldState, reasoningModeOptions
+} from "./reasoning-config";
+export type { ReasoningEffortOption, ReasoningFieldState, ReasoningModeOption } from "./reasoning-config";

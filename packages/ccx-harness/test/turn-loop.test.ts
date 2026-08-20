@@ -343,6 +343,51 @@ test("an HTTP error surfaces as a typed error and marks the turn failed", async 
   }
 });
 
+test("the mapped reasoning preference reaches the gateway request body", async () => {
+  const h = await harness([{ frames: textTurnFrames("ok") }]);
+  try {
+    await h
+      .loop({ reasoning: { effort: "xhigh", mode: "on", showReasoning: true } })
+      .runExchange({ sessionId: h.sessionId, userText: "hi" });
+
+    const body = h.upstream.requests[0].body;
+    assert.deepEqual(body.thinking, { display: "summarized", type: "adaptive" });
+    assert.deepEqual(body.output_config, { effort: "xhigh" });
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("reasoning mapping strips fields extraBody carried that the model rejects", async () => {
+  const h = await harness([{ frames: textTurnFrames("ok") }]);
+  try {
+    await h
+      .loop({ extraBody: { temperature: 0.4 }, reasoning: { effort: "high", mode: "on", showReasoning: false } })
+      .runExchange({ sessionId: h.sessionId, userText: "hi" });
+
+    const body = h.upstream.requests[0].body;
+    assert.equal(body.temperature, undefined, "Opus 5 rejects sampling parameters");
+    assert.deepEqual(body.output_config, { effort: "high" });
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("no reasoning fields are sent for a model with no capability entry", async () => {
+  const h = await harness([{ frames: textTurnFrames("ok") }]);
+  try {
+    await h
+      .loop({ model: "some-vendor/mystery-1", reasoning: { effort: "high", mode: "on", showReasoning: true } })
+      .runExchange({ sessionId: h.sessionId, userText: "hi" });
+
+    const body = h.upstream.requests[0].body;
+    assert.equal(body.thinking, undefined);
+    assert.equal(body.output_config, undefined);
+  } finally {
+    await h.cleanup();
+  }
+});
+
 test("full history is resent on the follow-up request", async () => {
   const tools = new FunctionToolExecutor([{ input_schema: { type: "object" }, name: "t", run: () => "r" }]);
   const h = await harness(

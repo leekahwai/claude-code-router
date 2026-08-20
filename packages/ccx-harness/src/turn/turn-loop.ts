@@ -11,6 +11,8 @@ import { randomUUID } from "node:crypto";
 import type { AssemblerEvent } from "../stream/anthropic-stream";
 import type { SessionStore } from "../session/store";
 import type { TurnMetricsStore } from "../metrics/store";
+import { mapReasoning, type MappedReasoning, type ReasoningPreference } from "../reasoning/map";
+import type { CapabilitySources } from "../reasoning/capabilities";
 import { streamMessages, UpstreamHttpError, type StreamMessagesResult } from "./provider-client";
 import type { ToolExecutor } from "./tools";
 
@@ -24,6 +26,10 @@ export type TurnLoopOptions = {
   metrics?: TurnMetricsStore;
   model: string;
   policyVersion?: string;
+  /** Where reasoning capabilities come from for the routed model. */
+  reasoningCapabilities?: CapabilitySources;
+  /** UI-configured reasoning preference, mapped per model before sending. */
+  reasoning?: ReasoningPreference;
   sessions: SessionStore;
   /** Assembled once per request; H1 keeps it static, H4 layers policy in. */
   system?: string;
@@ -160,6 +166,19 @@ export class TurnLoop {
     return { cancelled, iterations, requestIds, stopReason, text, toolCallCount, usage };
   }
 
+  /**
+   * The reasoning mapping for this loop's model, with any diagnostics the UI
+   * should surface (an unsupported effort silently downgraded, say).
+   */
+  reasoningMapping(): MappedReasoning {
+    return mapReasoning({
+      maxTokens: this.options.maxTokens ?? defaultMaxTokens,
+      model: this.options.model,
+      ...(this.options.reasoning ? { preference: this.options.reasoning } : {}),
+      ...(this.options.reasoningCapabilities ? { sources: this.options.reasoningCapabilities } : {})
+    });
+  }
+
   private requestBody(sessionId: string): Record<string, unknown> {
     const messages = this.options.sessions.listMessages(sessionId).map((message) => ({
       content: message.content,
@@ -168,7 +187,7 @@ export class TurnLoop {
     }));
 
     const definitions = this.options.tools?.definitions() ?? [];
-    return {
+    const body: Record<string, unknown> = {
       max_tokens: this.options.maxTokens ?? defaultMaxTokens,
       messages,
       model: this.options.model,
@@ -176,6 +195,17 @@ export class TurnLoop {
       ...(definitions.length > 0 ? { tools: definitions } : {}),
       ...this.options.extraBody
     };
+
+    // Reasoning is mapped last so it can also strip fields extraBody carried
+    // that this model rejects, such as temperature on the current Claude family.
+    const mapped = mapReasoning({
+      maxTokens: this.options.maxTokens ?? defaultMaxTokens,
+      model: this.options.model,
+      requestBody: body,
+      ...(this.options.reasoning ? { preference: this.options.reasoning } : {}),
+      ...(this.options.reasoningCapabilities ? { sources: this.options.reasoningCapabilities } : {})
+    });
+    return { ...body, ...mapped.body };
   }
 
   private recordMetrics(sessionId: string, requestId: string, turnId: string, result: StreamMessagesResult): void {
