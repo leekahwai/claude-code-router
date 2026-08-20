@@ -9,5 +9,8 @@
   },
   "scripts": {
     "test": "node ../ccx-vendor/tools/run-ccx-tests.mjs \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@ccx/vendor": "0.1.0"
   }
 }

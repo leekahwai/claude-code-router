@@ -24,3 +24,14 @@ export {
 export type {
   CapabilitySources, CatalogReasoning, ModelReasoningCapability, ReasoningEffort, ThinkingControl
 } from "./reasoning/capabilities";
+export { Workspace, WorkspaceEscapeError } from "./tools/workspace";
+export { defaultModePolicies, denialMessage, PermissionGate } from "./tools/permissions";
+export type {
+  ModePolicy, PermissionDecision, PermissionOutcome, PermissionPrompter, PermissionRequest, ToolRisk
+} from "./tools/permissions";
+export { BuiltinTools, defaultBuiltinLimits } from "./tools/builtin";
+export type { BuiltinLimits, BuiltinToolName, BuiltinToolsOptions } from "./tools/builtin";
+export { HarnessTools } from "./tools/registry";
+export type { HarnessToolsOptions } from "./tools/registry";
+export { McpRegistry, namespacedToolName, parseNamespacedToolName } from "./mcp/registry";
+export type { McpRegistryOptions, McpServerStatus } from "./mcp/registry";
