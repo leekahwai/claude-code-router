@@ -1,0 +1,166 @@
+/* Admin console. Same palette as the Work/Code view so the two read as one product. */
+:root {
+  --ground: #f3f5f6;
+  --surface: #ffffff;
+  --sunk: #e7ebec;
+  --ink: #101a1c;
+  --muted: #5b6d70;
+  --hair: #d3dcdd;
+  --accent: #00707c;
+  --accent-soft: #dfeef0;
+  --danger: #a5372a;
+  --danger-soft: #fbe9e6;
+  --warn: #92580f;
+  --warn-soft: #fbf1de;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0a1113;
+    --surface: #101a1d;
+    --sunk: #162326;
+    --ink: #e3ebeb;
+    --muted: #8ca1a3;
+    --hair: #25373a;
+    --accent: #46bec7;
+    --accent-soft: #122e32;
+    --danger: #e07a6d;
+    --danger-soft: #2b1614;
+    --warn: #d79a50;
+    --warn-soft: #2a2211;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+button, input { font: inherit; }
+h1 { font-size: 22px; margin: 0 0 8px; }
+h2 { font-size: 17px; margin: 24px 0 10px; }
+h3 { font-size: 15px; margin: 22px 0 8px; }
+
+.gate {
+  display: flex; flex-direction: column; gap: 12px;
+  margin: 0 auto; max-width: 460px; padding: 96px 24px;
+}
+.gate p { color: var(--muted); margin: 0; }
+.gate form { display: flex; gap: 8px; margin-top: 8px; }
+.gate input { flex: 1; }
+
+.shell { display: flex; flex-direction: column; height: 100%; }
+.bar {
+  align-items: center; background: var(--surface); border-bottom: 1px solid var(--hair);
+  display: flex; gap: 16px; padding: 10px 16px;
+}
+.tabs { display: flex; gap: 4px; }
+.tab {
+  background: none; border: 0; border-radius: var(--radius); color: var(--muted);
+  cursor: pointer; padding: 7px 12px;
+}
+.tab:hover { background: var(--sunk); }
+.tab.selected { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+.reason { align-items: center; display: flex; flex: 1; gap: 8px; }
+.reason span { color: var(--muted); font-size: 13px; }
+.reason input { flex: 1; }
+
+input {
+  background: var(--surface); border: 1px solid var(--hair); border-radius: var(--radius);
+  color: inherit; padding: 7px 10px;
+}
+input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+button.primary {
+  background: var(--accent); border: 0; border-radius: var(--radius); color: #fff;
+  cursor: pointer; font-weight: 600; padding: 8px 14px;
+}
+button.ghost {
+  background: none; border: 1px solid var(--hair); border-radius: var(--radius);
+  color: inherit; cursor: pointer; padding: 7px 12px;
+}
+button.danger {
+  background: var(--danger); border: 0; border-radius: var(--radius); color: #fff;
+  cursor: pointer; font-weight: 600; padding: 8px 14px;
+}
+button:disabled { cursor: not-allowed; opacity: 0.45; }
+
+.assurance, .error, .loading, .warn, .note {
+  border-radius: var(--radius); font-size: 13px; margin: 12px 16px 0; padding: 9px 12px;
+}
+.assurance { background: var(--sunk); color: var(--muted); }
+.error { background: var(--danger-soft); color: var(--danger); }
+.loading { background: var(--sunk); color: var(--muted); }
+.warn { background: var(--warn-soft); color: var(--warn); }
+.note { background: var(--sunk); color: var(--muted); margin-left: 0; margin-right: 0; }
+
+.content { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.panel {
+  background: var(--surface); border: 1px solid var(--hair); border-radius: var(--radius);
+  padding: 16px;
+}
+.empty { color: var(--muted); font-size: 14px; padding: 12px 0; }
+
+.stats { display: flex; flex-wrap: wrap; gap: 10px; }
+.stat {
+  background: var(--sunk); border-radius: var(--radius); display: flex; flex-direction: column;
+  gap: 2px; min-width: 118px; padding: 12px 14px;
+}
+.stat-value { font-size: 22px; font-weight: 650; }
+.stat-label { color: var(--muted); font-size: 12px; }
+
+.grid { border-collapse: collapse; width: 100%; }
+.grid th {
+  border-bottom: 1px solid var(--hair); color: var(--muted); font-size: 12px;
+  font-weight: 600; padding: 8px 10px; text-align: left;
+}
+.grid td { border-bottom: 1px solid var(--hair); padding: 10px; vertical-align: top; }
+.grid td .sub { color: var(--muted); display: block; font-size: 12px; }
+.actions { display: flex; gap: 6px; }
+.actions button {
+  background: none; border: 1px solid var(--hair); border-radius: var(--radius);
+  color: inherit; cursor: pointer; padding: 5px 10px;
+}
+.reason-cell { color: var(--muted); max-width: 340px; word-break: break-word; }
+
+.pill {
+  background: var(--sunk); border-radius: 999px; color: var(--muted); display: inline-block;
+  font-size: 11px; margin-right: 4px; padding: 2px 8px;
+}
+.warn-pill { background: var(--warn-soft); color: var(--warn); }
+
+.search { display: flex; gap: 8px; }
+.search input:first-of-type { flex: 2; }
+.search input + input { flex: 1; }
+
+.hits { display: flex; flex-direction: column; gap: 6px; list-style: none; margin: 12px 0 0; padding: 0; }
+.hits button {
+  background: none; border: 1px solid var(--hair); border-radius: var(--radius); color: inherit;
+  cursor: pointer; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px;
+  text-align: left; width: 100%;
+}
+.hits button:hover { background: var(--sunk); }
+.hit-title { font-weight: 600; }
+.hit-meta { color: var(--muted); font-size: 12px; }
+.hit-excerpt { color: var(--muted); font-size: 13px; }
+
+.transcript-head { align-items: flex-start; display: flex; gap: 14px; }
+.transcript-head h2 { margin: 0; }
+.transcript-head .sub { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+.transcript-head > :last-child { margin-left: auto; }
+.confirm { display: flex; gap: 6px; margin-left: auto; }
+
+.messages { display: flex; flex-direction: column; gap: 10px; list-style: none; margin: 18px 0 0; padding: 0; }
+.message {
+  background: var(--sunk); border-radius: var(--radius); display: flex; flex-direction: column;
+  gap: 4px; padding: 10px 12px;
+}
+.message.assistant { background: var(--accent-soft); }
+.message .role { color: var(--muted); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+.message pre {
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0;
+  white-space: pre-wrap; word-break: break-word;
+}

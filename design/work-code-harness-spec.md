@@ -397,7 +397,7 @@ land before H0 because the session schema needs a real `user_id` from the first 
 | **A2** Transcript sync ✅ | admin | Spool → push → ingest, modelled on `raw-trace-sync`; skip entirely on a central deployment | 1.5–2 wk |
 | **H5** Interface ✅ | harness | Work + Code views, streaming renderer, tool cards, approval prompts, skill chips, session list with retention notice | 3 wk |
 | **H6** Configuration page ✅ | harness | Per-mode profile binding, provider/model pickers, MCP and skill enablement, gating | 1 wk |
-| **A3** Admin console | admin | Cross-user session browser extending Agent Analysis, transcript reader, search, export, delete-for-user, access-log view | 2–2.5 wk |
+| **A3** Admin console ✅ | admin | Cross-user session browser extending Agent Analysis, transcript reader, search, export, delete-for-user, access-log view | 2–2.5 wk |
 | **H7** Metering + hardening | harness | Turn-to-usage correlation, per-mode and per-user widgets, retention enforcement, redaction, error paths | 1.5–2 wk |
 
 **Harness track ≈ 13–14 weeks. Admin track ≈ 5.5–6.5 weeks**, of which A2 disappears on a central
@@ -560,6 +560,84 @@ desktop app uses, so A3 reads it through `SessionAuthorizer` unchanged.
 Enabling sync on a laptop is one config block; the first launch after enabling
 backfills whatever history is already on disk, once, marked by
 `sync.backfilledAt` so a relaunch does not re-ship everything.
+
+---
+
+## 5.3 Admin console
+
+Where the transcripts land is where the console lives: `@ccx/collector` serves it
+at `/admin`. An administrator's laptop holds only their own sessions, so a
+console inside the desktop app would show almost nothing.
+
+### Authentication is the identity model, not a second one
+
+The operator signs in with their issued API key. The collector hashes it and
+resolves the person from the binding an administrator recorded — the same path a
+laptop's transcripts take. No admin password, no session cookie, one place to
+revoke. Two consequences stated plainly rather than hidden:
+
+- The key travels in a header on every request, so this belongs behind TLS. The
+  bare server binds to localhost and is meant for a pilot.
+- The key is held in `sessionStorage`, which dies with the tab — not
+  `localStorage`, which would outlive the operator on a shared machine.
+
+An unknown key and a revoked key get **the same** 403 message. Distinguishing
+them would make the directory probeable.
+
+### Every read is a logged read
+
+`AdminConsole` is the only way in, and the transport never touches the stores, so
+the audit trail cannot be bypassed by calling the API differently.
+
+| Action | Logged as | Notes |
+|---|---|---|
+| Read one transcript | `read-session` | Reading your own is not logged — that is not an event worth auditing |
+| List a person's sessions / search | `search` | Recorded with the query text |
+| Export everything held on a person | `export-user` | |
+| Delete a transcript | `delete-session` | Logged *before* the delete; a reason is required |
+| Delete a person's data | `delete-user` | Same, plus credentials revoked and the account suspended |
+
+**Search is a read even when it returns nothing.** An administrator who searches
+everyone's transcripts for a word has read everyone's transcripts, so the log
+records the query itself — `text="redundancy" reason="..."` — not merely that a
+search happened. A log that said only "someone searched" could not answer the
+question it exists to answer.
+
+The reason field sits in the toolbar, always visible, and the UI disables
+cross-user actions until it is filled. The server checks again, because a
+browser is not a security boundary.
+
+### Search
+
+FTS5 over a `ccx_message_fts` table, caught up from the application rather than
+by triggers. A trigger could only index the raw `content_json`, so FTS would
+tokenise the JSON structure too and a search for `text` or `type` would match
+every message ever stored; catching up in JS lets `messageText` flatten a
+message into what a person actually said first. The catch-up is a watermark over
+`ccx_messages.id`, which is safe because that column is monotonic and messages
+are write-once on the collector.
+
+Query input is escaped into quoted FTS phrases, ANDed. Raw admin input reaching
+the FTS parser means a stray `"` either errors or silently changes what was
+searched for, and `" OR body : *` would return every conversation in the
+company. Tested with each of those.
+
+### Deletion
+
+Deleting a person's data removes their transcripts and revokes their
+credentials, but **keeps the user row**, marking it suspended. Removing it would
+orphan the access-log entries recording what was read of theirs — the opposite
+of what a deletion request should achieve. Index rows go too, so a deleted
+transcript stops being findable, which a delete that left it searchable would
+not be.
+
+### What the console refuses to imply
+
+Every page carries the assurance banner: identity is `claimed`, derived from a
+transferable key. A console that presented attribution as fact would invite
+decisions the data cannot support. The overview also names any temporary
+accounts still active, so the first-run administrator cannot quietly become
+permanent.
 
 ---
 

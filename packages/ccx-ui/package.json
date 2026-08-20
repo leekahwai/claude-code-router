@@ -14,6 +14,8 @@
   "scripts": {
     "test": "node ../ccx-vendor/tools/run-ccx-tests.mjs \"test/**/*.test.ts\"",
     "build": "node tools/build.mjs",
-    "test:render": "node tools/build.mjs && node test/render-smoke.mjs"
+    "test:render": "node tools/build.mjs && node test/render-smoke.mjs",
+    "build:admin": "node tools/build-admin.mjs",
+    "test:admin-render": "node tools/build-admin.mjs && node tools/run-render-smoke.mjs test/admin-render.mjs"
   }
 }

@@ -85,3 +85,13 @@ export type { FlushResult, SessionSyncClientOptions, SyncSendResult, SyncTranspo
 export { SessionSyncCollector } from "./sync/collector";
 export type { CollectorOptions, IngestOutcome } from "./sync/collector";
 export { createSessionSyncHandler, maxSyncBodyBytes } from "./sync/http";
+
+// Admin console (A3): cross-user browsing, search, export, deletion, audit.
+export { AdminConsole } from "./admin/console";
+export type {
+  AdminConsoleOptions, AdminExport, AdminOverview, AdminSearchHit, AdminSearchQuery,
+  AdminTranscript, AdminUserRow
+} from "./admin/console";
+export { excerpt, messageText } from "./admin/text";
+export { ftsPhrase, TranscriptIndex } from "./admin/transcript-index";
+export type { IndexedHit } from "./admin/transcript-index";

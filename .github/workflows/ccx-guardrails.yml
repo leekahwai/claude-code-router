@@ -145,3 +145,11 @@ jobs:
 
       - name: Build and drive the Work/Code renderer
         run: npm run -w @ccx/ui test:render
+
+      # The console starts a real collector in-process, so it needs a SQLite
+      # binding it can open under plain Node.
+      - name: Build native SQLite binding (Node ABI)
+        run: npm rebuild better-sqlite3
+
+      - name: Build and drive the admin console
+        run: npm run -w @ccx/ui test:admin-render

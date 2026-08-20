@@ -12,7 +12,22 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createBetterSqliteDatabase, type BetterSqliteDatabase } from "@ccr/core/storage/sqlite-native";
 
-export type AccessAction = "export-user" | "list-sessions" | "read-session";
+/**
+ * Every way an administrator can touch someone else's material.
+ *
+ * `search` is here because searching transcripts across people *is* a
+ * cross-user read — an admin who greps everyone's conversations for a word has
+ * read everyone's conversations, whether or not a hit came back. The query text
+ * is recorded with it, so the log says what was looked for and not merely that
+ * something was.
+ */
+export type AccessAction =
+  | "delete-session"
+  | "delete-user"
+  | "export-user"
+  | "list-sessions"
+  | "read-session"
+  | "search";
 
 export type AccessLogEntry = {
   action: AccessAction;

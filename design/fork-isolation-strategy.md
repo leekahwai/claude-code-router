@@ -121,7 +121,7 @@ Every capability the product needs, the naive implementation, and the isolated o
 | 8 | Company policy in Work/Code | `claude-code-router-plugin.ts` | compose it in our harness — we own the client | **0** |
 | 9 | Policy for other clients (Claude Code CLI) | core enricher | router rule rewrite or route script — pure config | **0** |
 | 10 | Per-user + pre/post token metrics | `ALTER` `usage_events` / `request_logs` | our own SQLite, joined on `request_id` | **0** |
-| 11 | Dashboard + admin console | `dashboard.tsx` (5,281 lines) | our own pages in `acme-ui` | **0** |
+| 11 | Dashboard + admin console | `dashboard.tsx` (5,281 lines) | our own console, served by `@ccx/collector` at `/admin`. See spec §5.3 | **0** ✅ |
 | 12 | MCP client | extract from `toolhub-mcp.ts` | vendored copy | **0** |
 | 13 | Skill roots | refactor `cli-middleware-runtime.ts` | vendored 12-line table | **0** |
 | 14 | Transcript sync | modify `raw-trace-sync.ts` | pattern copied, not code: our own outbox table + `@ccx/collector` service. See spec §5.2 | **0** ✅ |

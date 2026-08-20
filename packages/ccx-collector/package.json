@@ -12,6 +12,7 @@
   },
   "scripts": {
     "start": "node tools/serve.mjs",
-    "test": "node ../ccx-vendor/tools/run-ccx-tests.mjs \"test/**/*.test.ts\""
+    "test": "node ../ccx-ui/tools/build-admin.mjs && node ../ccx-vendor/tools/run-ccx-tests.mjs \"test/**/*.test.ts\"",
+    "build": "node ../ccx-ui/tools/build-admin.mjs"
   }
 }

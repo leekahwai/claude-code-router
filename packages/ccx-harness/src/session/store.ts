@@ -489,6 +489,86 @@ export class SessionStore {
     return Boolean(this.database.prepare("SELECT 1 FROM ccx_turns WHERE id = ?").get(id));
   }
 
+  /**
+   * Cross-user session query for the admin console.
+   *
+   * Every caller reaches this through `SessionAuthorizer`, which is what makes
+   * the cross-user part governed; the store itself stays a store.
+   */
+  querySessions(filter: {
+    from?: string;
+    ids?: string[];
+    limit?: number;
+    mode?: CcxMode;
+    to?: string;
+    userId?: string;
+  } = {}): SessionRecord[] {
+    const clauses: string[] = [];
+    const values: unknown[] = [];
+    if (filter.userId) {
+      clauses.push("user_id = ?");
+      values.push(filter.userId);
+    }
+    if (filter.mode) {
+      clauses.push("mode = ?");
+      values.push(filter.mode);
+    }
+    if (filter.from) {
+      clauses.push("updated_at >= ?");
+      values.push(filter.from);
+    }
+    if (filter.to) {
+      clauses.push("updated_at <= ?");
+      values.push(filter.to);
+    }
+    if (filter.ids) {
+      if (filter.ids.length === 0) {
+        return [];
+      }
+      clauses.push(`id IN (${filter.ids.map(() => "?").join(", ")})`);
+      values.push(...filter.ids);
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+    const rows = this.database
+      .prepare(`SELECT * FROM ccx_sessions ${where} ORDER BY updated_at DESC LIMIT ?`)
+      .all(...values, filter.limit ?? 200) as Array<Record<string, unknown>>;
+    return rows.map(toSession);
+  }
+
+  /** Row counts for the admin overview. */
+  counts(): { messages: number; sessions: number; toolCalls: number; turns: number } {
+    const one = (sql: string): number => Number((this.database.prepare(sql).get() as { total: number }).total ?? 0);
+    return {
+      messages: one("SELECT COUNT(*) AS total FROM ccx_messages"),
+      sessions: one("SELECT COUNT(*) AS total FROM ccx_sessions"),
+      toolCalls: one("SELECT COUNT(*) AS total FROM ccx_tool_calls"),
+      turns: one("SELECT COUNT(*) AS total FROM ccx_turns")
+    };
+  }
+
+  /** Per-person activity for the admin user list. */
+  activityByUser(): Array<{ lastActiveAt: string; sessions: number; userId: string }> {
+    const rows = this.database
+      .prepare(`
+        SELECT user_id, COUNT(*) AS sessions, MAX(updated_at) AS last_active_at
+        FROM ccx_sessions GROUP BY user_id ORDER BY last_active_at DESC
+      `)
+      .all() as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      lastActiveAt: String(row.last_active_at ?? ""),
+      sessions: Number(row.sessions ?? 0),
+      userId: String(row.user_id ?? "")
+    }));
+  }
+
+  /** Everything under one person, for an export or a deletion. */
+  deleteSessionsForUser(userId: string): string[] {
+    const ids = (this.database.prepare("SELECT id FROM ccx_sessions WHERE user_id = ?").all(userId) as Array<{ id: string }>)
+      .map((row) => row.id);
+    this.database.prepare("DELETE FROM ccx_sessions WHERE user_id = ?").run(userId);
+    return ids;
+  }
+
   /** Run `work` in one transaction, so a rejected bundle leaves nothing behind. */
   transaction<T>(work: () => T): T {
     return this.database.transaction(work)();
