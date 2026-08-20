@@ -170,7 +170,7 @@ export class BuiltinTools {
   }
 
   private readFile(requested: string): ToolOutcome {
-    const target = this.options.workspace.resolve(requested);
+    const target = this.options.workspace.resolve(requested, "read");
     const stats = statSync(target);
     if (stats.size > this.limits.maxReadBytes) {
       return {
@@ -189,7 +189,7 @@ export class BuiltinTools {
   }
 
   private glob(requested: string, pattern: string): ToolOutcome {
-    const root = this.options.workspace.resolve(requested);
+    const root = this.options.workspace.resolve(requested, "read");
     const matches: string[] = [];
     const suffix = pattern.startsWith("*.") ? pattern.slice(1) : "";
 
@@ -216,7 +216,7 @@ export class BuiltinTools {
   }
 
   private grep(requested: string, pattern: string): ToolOutcome {
-    const root = this.options.workspace.resolve(requested);
+    const root = this.options.workspace.resolve(requested, "read");
     let expression: RegExp;
     try {
       expression = new RegExp(pattern);

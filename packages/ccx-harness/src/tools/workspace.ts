@@ -20,42 +20,73 @@ export class WorkspaceEscapeError extends Error {
   }
 }
 
+export type WorkspaceAccess = "read" | "write";
+
+export type WorkspaceOptions = {
+  /**
+   * Extra roots that may be READ but never written — skill directories, which
+   * live under the user's home rather than the project. Without this a skill
+   * that ships a reference file or a script could only be reached by giving
+   * the model a shell, which is precisely what Work mode withholds.
+   */
+  readRoots?: string[];
+};
+
 export class Workspace {
   readonly root: string;
+  private readonly readRoots: string[];
 
-  constructor(root: string) {
+  constructor(root: string, options: WorkspaceOptions = {}) {
     // The root itself is realpath'd once so comparisons are like-for-like on
     // platforms where the temp directory is itself a symlink.
     this.root = safeRealpath(path.resolve(root));
+    this.readRoots = (options.readRoots ?? []).map((entry) => safeRealpath(path.resolve(entry)));
   }
 
   /**
-   * Resolve a tool-supplied path inside the workspace.
+   * Resolve a tool-supplied path.
    *
-   * Absolute paths are permitted only when they already point inside the
-   * workspace; relative paths are resolved against the root.
+   * Writes are confined to the workspace root. Reads may also land in a
+   * declared read-only root. Absolute paths are permitted only when they
+   * already point somewhere allowed; relative paths resolve against the root.
    */
-  resolve(requested: string): string {
+  resolve(requested: string, access: WorkspaceAccess = "write"): string {
     const candidate = path.isAbsolute(requested)
       ? path.resolve(requested)
       : path.resolve(this.root, requested);
 
     const real = safeRealpath(candidate);
-    if (!this.contains(real)) {
+    const permitted = access === "read" ? this.readable(real) : this.contains(real);
+    if (!permitted) {
       throw new WorkspaceEscapeError(requested);
     }
     return candidate;
   }
 
   contains(target: string): boolean {
-    const resolved = path.resolve(target);
-    return resolved === this.root || resolved.startsWith(`${this.root}${path.sep}`);
+    return within(this.root, target);
+  }
+
+  /** Inside the workspace, or inside one of the declared read-only roots. */
+  readable(target: string): boolean {
+    return this.contains(target) || this.readRoots.some((root) => within(root, target));
   }
 
   /** Path relative to the workspace root, for display and logging. */
   relative(target: string): string {
-    return path.relative(this.root, target) || ".";
+    const resolved = path.resolve(target);
+    if (this.contains(resolved)) {
+      return path.relative(this.root, resolved) || ".";
+    }
+    // Outside the workspace (a skill file); an absolute path is clearer than
+    // a relative one full of "..".
+    return resolved;
   }
+}
+
+function within(root: string, target: string): boolean {
+  const resolved = path.resolve(target);
+  return resolved === root || resolved.startsWith(`${root}${path.sep}`);
 }
 
 /**

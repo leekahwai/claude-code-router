@@ -8,6 +8,8 @@
  * check is explicit rather than relying on that.
  */
 import type { McpRegistry } from "../mcp/registry";
+import type { SkillRegistry } from "../skills/registry";
+import { executeSkillTool, SKILL_TOOL_NAME, skillToolDefinition } from "../skills/tool";
 import type { ToolDefinition, ToolExecutor, ToolOutcome } from "../turn/tools";
 import type { BuiltinTools } from "./builtin";
 import { denialMessage, PermissionGate, type ModePolicy } from "./permissions";
@@ -17,17 +19,30 @@ export type HarnessToolsOptions = {
   gate: PermissionGate;
   mcp?: McpRegistry;
   policy: ModePolicy;
+  skills?: SkillRegistry;
 };
 
 export class HarnessTools implements ToolExecutor {
   constructor(private readonly options: HarnessToolsOptions) {}
 
   definitions(): ToolDefinition[] {
-    return [...(this.options.builtin?.definitions() ?? []), ...(this.options.mcp?.definitions() ?? [])];
+    return [
+      ...(this.options.skills && this.options.skills.list().length > 0
+        ? [skillToolDefinition(this.options.skills)]
+        : []),
+      ...(this.options.builtin?.definitions() ?? []),
+      ...(this.options.mcp?.definitions() ?? [])
+    ];
   }
 
   async execute(call: { input: unknown; name: string }, signal?: AbortSignal): Promise<ToolOutcome> {
-    const { builtin, mcp } = this.options;
+    const { builtin, mcp, skills } = this.options;
+
+    // Loading a skill only reads text the user already installed, so it is not
+    // gated. What the skill then asks for still is.
+    if (skills && call.name === SKILL_TOOL_NAME) {
+      return executeSkillTool(skills, call.input);
+    }
 
     if (builtin?.handles(call.name)) {
       return builtin.execute(call.name, call.input, signal);
