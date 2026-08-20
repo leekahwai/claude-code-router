@@ -16,6 +16,7 @@ import {
   HarnessTools,
   McpRegistry,
   PermissionGate,
+  resolutionMessage,
   resolveMode,
   resolvedMcpServers,
   SessionStore,
@@ -23,7 +24,10 @@ import {
   TurnLoop,
   TurnMetricsStore,
   Workspace,
-  type ResolvedMode
+  type Identity,
+  type IdentityResolver,
+  type ResolvedMode,
+  type SessionAuthorizer
 } from "@ccx/harness";
 import type { AppConfig } from "@ccr/core/contracts/app";
 import { DEFAULT_RETENTION_NOTICE, type CcxMessage, type CcxSessionSummary, type CcxViewConfig } from "./contract";
@@ -32,6 +36,10 @@ import { SessionService, type SessionServiceOptions } from "./session-service";
 export type CcxRuntimeOptions = {
   /** The API key the user was issued. Never leaves the main process. */
   apiKey: string;
+  /** Turns the credential into a person; swapped for SSO later. */
+  identityResolver: IdentityResolver;
+  /** Enforces the three access rules and writes the audit log. */
+  authorizer: SessionAuthorizer;
   config: CcxConfigStore;
   companyPack: CompanyPackStore;
   emit: SessionServiceOptions["emit"];
@@ -41,7 +49,6 @@ export type CcxRuntimeOptions = {
   mode: "code" | "work";
   projectDirectory: string;
   sessions: SessionStore;
-  userId: string;
 };
 
 export class CcxRuntime {
@@ -75,13 +82,29 @@ export class CcxRuntime {
     this.mcp = undefined;
   }
 
+  /**
+   * Who is using this window. Resolved per call rather than cached, so a
+   * revoked key or a suspended account takes effect immediately.
+   */
+  identity(): Identity | undefined {
+    const resolution = this.options.identityResolver.resolve(this.options.apiKey);
+    return resolution.ok ? resolution.identity : undefined;
+  }
+
   resolved(): ResolvedMode {
-    return resolveMode({
+    const base = resolveMode({
       appConfig: this.options.loadAppConfig(),
       ccxConfig: this.options.config.load(),
       hasCredential: Boolean(this.options.apiKey.trim()),
       mode: this.options.mode
     });
+    if (base.blockedReason) {
+      return base;
+    }
+    // A key that no administrator has bound to a person is not an identity, so
+    // the product does not run rather than attributing work to nobody.
+    const resolution = this.options.identityResolver.resolve(this.options.apiKey);
+    return resolution.ok ? base : { ...base, blockedReason: resolutionMessage(resolution.reason) };
   }
 
   viewConfig(): CcxViewConfig {
@@ -93,12 +116,22 @@ export class CcxRuntime {
       model: resolved.model,
       retentionNotice: DEFAULT_RETENTION_NOTICE,
       skills: skills.map((skill) => ({ description: skill.description, name: skill.name })),
-      userId: this.options.userId
+      userId: this.identity()?.user.id ?? ""
     };
   }
 
   listSessions(): CcxSessionSummary[] {
-    return this.options.sessions.listSessions(this.options.userId).map((session) => ({
+    const identity = this.identity();
+    if (!identity) {
+      return [];
+    }
+    // Through the authorizer even for one's own sessions, so there is a single
+    // code path and no second opinion about ownership.
+    const listed = this.options.authorizer.listSessions(identity, identity.user.id);
+    if (!listed.allowed) {
+      return [];
+    }
+    return listed.value.map((session) => ({
       createdAt: session.createdAt,
       id: session.id,
       mode: session.mode,
@@ -109,7 +142,11 @@ export class CcxRuntime {
   }
 
   createSession(mode: "code" | "work"): CcxSessionSummary {
+    const identity = this.identity();
     const resolved = this.resolved();
+    if (!identity) {
+      throw new Error(resolved.blockedReason ?? "This API key is not recognised.");
+    }
     if (resolved.blockedReason) {
       // The gate is enforced here, not only by disabling the composer: a
       // renderer bug must not be able to start an unconfigured session.
@@ -123,7 +160,7 @@ export class CcxRuntime {
       profileId: resolved.settings.profileId,
       provider: resolved.provider,
       title: "",
-      userId: this.options.userId,
+      userId: identity.user.id,
       workspaceDir: this.options.config.load().workspaceDir
     });
     return {
@@ -137,15 +174,17 @@ export class CcxRuntime {
   }
 
   messages(sessionId: string): CcxMessage[] {
-    const session = this.options.sessions.getSession(sessionId);
-    // Session ownership is checked in main; a renderer cannot read another
-    // user's transcript by guessing an id.
-    if (!session || session.userId !== this.options.userId) {
+    const identity = this.identity();
+    if (!identity) {
       return [];
     }
-    return this.options.sessions
-      .listMessages(sessionId)
-      .map((message) => ({ content: message.content, role: message.role, seq: message.seq }));
+    // The authorizer owns the rule, and logs the read when it is somebody
+    // else's. A renderer cannot reach a transcript by guessing an id.
+    const result = this.options.authorizer.readMessages(identity, sessionId, "opened in the app");
+    if (!result.allowed) {
+      return [];
+    }
+    return result.value.map((message) => ({ content: message.content, role: message.role, seq: message.seq }));
   }
 
   private skills(): SkillRegistry {
@@ -196,7 +235,7 @@ export class CcxRuntime {
         policy: settings.policy,
         skills
       }),
-      userId: this.options.userId
+      userId: this.identity()?.user.id ?? ""
     });
   }
 }

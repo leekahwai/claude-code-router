@@ -388,7 +388,7 @@ land before H0 because the session schema needs a real `user_id` from the first 
 
 | Phase | Track | Deliverable | Est. |
 |---|---|---|---|
-| **A1** Identity + roles | admin | Users, roles, authenticated identity (SSO or centrally issued keys), server-side authorization, access log | 2 wk |
+| **A1** Identity + roles ✅ | admin | Users, roles, credential bindings resolved server-side, the three access rules, and a database-enforced append-only access log. An SSO resolver drops in without a migration. | 2 wk |
 | **H0** Foundations | harness | Fork-isolation scaffolding (see `fork-isolation-strategy.md`): upstream remote, own workspace packages, vendor tooling, contract tests, one-line seam. Session store schema with `user_id`. MCP transports **vendored, not extracted** | 2–2.5 wk |
 | **H1** Turn loop | harness | Streaming client through the gateway, SSE parse, tool_use detection, multi-turn loop, cancellation. Test-driven, no UI | 2 wk |
 | **H2** MCP + tools | harness | Registry, pooling, namespacing, timeouts, builtin file/shell tools, permission model | 2 wk |

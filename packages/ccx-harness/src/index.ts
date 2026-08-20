@@ -55,3 +55,13 @@ export {
   availableModels, availableProviders, gatewayBaseUrl, resolvedMcpServers, resolveMode
 } from "./config/resolve";
 export type { ModelChoice, ResolvedMode, ResolveModeInput } from "./config/resolve";
+export { IdentityDirectory } from "./identity/directory";
+export type {
+  CredentialBinding, IdentityAssurance, UserRecord, UserRole, UserStatus
+} from "./identity/directory";
+export { AccessLog } from "./identity/access-log";
+export type { AccessAction, AccessLogEntry } from "./identity/access-log";
+export { CredentialIdentityResolver, resolutionMessage } from "./identity/resolver";
+export type { Identity, IdentityResolution, IdentityResolver } from "./identity/resolver";
+export { SessionAuthorizer } from "./identity/authorization";
+export type { Authorized, AuthorizationOptions } from "./identity/authorization";

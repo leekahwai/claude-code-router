@@ -6,17 +6,31 @@ import test from "node:test";
 import { createDefaultAppConfig } from "@ccr/core/config/default-config";
 import type { AppConfig } from "@ccr/core/contracts/app";
 import {
+  AccessLog,
   CcxConfigStore,
   CompanyPackStore,
+  CredentialIdentityResolver,
+  IdentityDirectory,
+  SessionAuthorizer,
   SessionStore,
   TurnMetricsStore,
+  credentialFingerprint,
   sixTierFrameworkTemplate
 } from "@ccx/harness";
 import { CcxRuntime } from "../src/runtime.ts";
 import type { CcxPermissionAsk, CcxTurnEvent } from "../src/contract.ts";
 import { FakeUpstream, textTurnFrames, type ScriptedTurn } from "../../ccx-harness/test/fixtures/fake-upstream.ts";
 
-async function build(options: { mode?: "code" | "work"; providers?: boolean; apiKey?: string; script?: ScriptedTurn[] } = {}) {
+async function build(
+  options: {
+    mode?: "code" | "work";
+    providers?: boolean;
+    apiKey?: string;
+    script?: ScriptedTurn[];
+    /** Skip binding the key to a person, as an unregistered laptop would be. */
+    unbound?: boolean;
+  } = {}
+) {
   const directory = mkdtempSync(path.join(os.tmpdir(), "ccx-rt-"));
   const projectDirectory = path.join(directory, "proj");
   mkdirSync(projectDirectory, { recursive: true });
@@ -41,21 +55,39 @@ async function build(options: { mode?: "code" | "work"; providers?: boolean; api
   const events: CcxTurnEvent[] = [];
   const asks: CcxPermissionAsk[] = [];
 
+  const apiKey = options.apiKey ?? "sk-issued-to-ada";
+  const identityDirectory = new IdentityDirectory(path.join(directory, "identity.sqlite"));
+  const accessLog = new AccessLog(path.join(directory, "access.sqlite"));
+  identityDirectory.upsertUser({
+    displayName: "Ada",
+    email: "ada@example.com",
+    externalId: "",
+    id: "ada",
+    role: "user",
+    status: "active"
+  });
+  if (!options.unbound) {
+    identityDirectory.bindCredential({ boundBy: "root", fingerprint: credentialFingerprint(apiKey), userId: "ada" });
+  }
+  const authorizer = new SessionAuthorizer({ accessLog, sessions });
+
   const runtime = new CcxRuntime({
-    apiKey: options.apiKey ?? "sk-issued-to-ada",
+    apiKey,
     ask: (ask) => asks.push(ask),
+    authorizer,
     companyPack,
     config,
     emit: (event) => events.push(event),
     loadAppConfig: () => appConfig,
     metrics,
+    identityResolver: new CredentialIdentityResolver(identityDirectory),
     mode: options.mode ?? "code",
     projectDirectory,
-    sessions,
-    userId: "ada"
+    sessions
   });
 
   return {
+    accessLog,
     appConfig,
     asks,
     cleanup: async () => {
@@ -63,8 +95,11 @@ async function build(options: { mode?: "code" | "work"; providers?: boolean; api
       await upstream.stop();
       sessions.close();
       metrics.close();
+      identityDirectory.close();
+      accessLog.close();
       rmSync(directory, { force: true, recursive: true });
     },
+    identityDirectory,
     companyPack,
     config,
     events,
@@ -124,8 +159,9 @@ test("sessions and transcripts are scoped to the signed-in user", async () => {
   const h = await build();
   try {
     const mine = h.runtime.createSession("code");
-    // A session belonging to somebody else, as a sync or a shared machine
-    // could produce.
+    h.identityDirectory.upsertUser({
+      displayName: "Grace", email: "g@x", externalId: "", id: "grace", role: "user", status: "active"
+    });
     h.sessions.createSession({
       credentialFingerprint: "x".repeat(64),
       id: "someone-else",
@@ -137,6 +173,44 @@ test("sessions and transcripts are scoped to the signed-in user", async () => {
 
     assert.deepEqual(h.runtime.listSessions().map((session) => session.id), [mine.id]);
     assert.deepEqual(h.runtime.messages("someone-else"), [], "guessing an id must not reveal a transcript");
+    assert.deepEqual(h.accessLog.listForSubject("grace"), [], "a refused read is not an access");
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("a key nobody bound to a person blocks the product", async () => {
+  const h = await build({ unbound: true });
+  try {
+    assert.match(String(h.runtime.viewConfig().blockedReason), /not recognised/);
+    assert.throws(() => h.runtime.createSession("code"), /not recognised/);
+    assert.deepEqual(h.runtime.listSessions(), []);
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("revoking the key takes effect without restarting the app", async () => {
+  const h = await build();
+  try {
+    h.runtime.createSession("code");
+    assert.equal(h.runtime.viewConfig().blockedReason, undefined);
+
+    h.identityDirectory.revokeCredential(credentialFingerprint("sk-issued-to-ada"));
+
+    assert.match(String(h.runtime.viewConfig().blockedReason), /revoked/);
+    assert.deepEqual(h.runtime.listSessions(), [], "a revoked key stops seeing anything");
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("the resolved identity, not a passed-in string, owns the session", async () => {
+  const h = await build();
+  try {
+    const created = h.runtime.createSession("code");
+    assert.equal(h.sessions.getSession(created.id)?.userId, "ada");
+    assert.equal(h.runtime.viewConfig().userId, "ada");
   } finally {
     await h.cleanup();
   }
